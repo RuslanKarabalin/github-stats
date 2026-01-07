@@ -20,7 +20,7 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{}
 
-		flag.StringVar(&cfg.Token, "token", "", "GitHub Personal Access Token (overrides GITHUB_TOKEN env)")
+	flag.StringVar(&cfg.Token, "token", "", "GitHub Personal Access Token (overrides GITHUB_TOKEN env)")
 	flag.StringVar(&cfg.Username, "user", "", "GitHub username to analyze (defaults to authenticated user)")
 	flag.BoolVar(&cfg.FullScan, "full", false, "Perform full history scan (slower but complete)")
 	flag.BoolVar(&cfg.NoCache, "no-cache", false, "Disable caching")
@@ -44,26 +44,26 @@ func Load() (*Config, error) {
 
 	flag.Parse()
 
-		if *statsOnly != "" {
+	if *statsOnly != "" {
 		cfg.StatsOnly = strings.Split(*statsOnly, ",")
 		for i, s := range cfg.StatsOnly {
 			cfg.StatsOnly[i] = strings.TrimSpace(s)
 		}
 	}
 
-		if cfg.Token == "" {
+	if cfg.Token == "" {
 		cfg.Token = os.Getenv("GITHUB_TOKEN")
 	}
 
-		if cfg.Token == "" {
+	if cfg.Token == "" {
 		return nil, fmt.Errorf("GitHub token is required. Set GITHUB_TOKEN environment variable or use --token flag")
 	}
 
-		if cfg.Format != "table" && cfg.Format != "json" {
+	if cfg.Format != "table" && cfg.Format != "json" {
 		return nil, fmt.Errorf("invalid format: %s (must be 'table' or 'json')", cfg.Format)
 	}
 
-		if cfg.MaxWorkers < 1 || cfg.MaxWorkers > 50 {
+	if cfg.MaxWorkers < 1 || cfg.MaxWorkers > 50 {
 		return nil, fmt.Errorf("workers must be between 1 and 50")
 	}
 
@@ -72,7 +72,8 @@ func Load() (*Config, error) {
 
 func (c *Config) ShouldShowStat(stat string) bool {
 	if len(c.StatsOnly) == 0 {
-		return true 	}
+		return true
+	}
 	for _, s := range c.StatsOnly {
 		if s == stat {
 			return true

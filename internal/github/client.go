@@ -53,14 +53,14 @@ func (c *Client) GetUser(username string) (*github.User, error) {
 
 func (c *Client) GetRepositories(username string) ([]*github.Repository, error) {
 	var allRepos []*github.Repository
-	opts := &github.RepositoryListOptions{
+	opts := &github.RepositoryListByUserOptions{
 		Type:        "owner",
 		Sort:        "updated",
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
 
 	for {
-		repos, resp, err := c.client.Repositories.List(c.ctx, username, opts)
+		repos, resp, err := c.client.Repositories.ListByUser(c.ctx, username, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list repositories: %w", err)
 		}
@@ -81,17 +81,19 @@ func (c *Client) GetLanguages(repos []*github.Repository) (map[string]int64, err
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-		sem := make(chan struct{}, c.maxWorkers)
+	sem := make(chan struct{}, c.maxWorkers)
 	errChan := make(chan error, len(repos))
 
 	for _, repo := range repos {
 		if repo.Fork != nil && *repo.Fork {
-			continue 		}
+			continue
+		}
 
 		wg.Add(1)
 		go func(r *github.Repository) {
 			defer wg.Done()
-			sem <- struct{}{}        			defer func() { <-sem }() 
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			langs, _, err := c.client.Repositories.ListLanguages(c.ctx,
 				*r.Owner.Login, *r.Name)
 			if err != nil {
@@ -110,7 +112,7 @@ func (c *Client) GetLanguages(repos []*github.Repository) (map[string]int64, err
 	wg.Wait()
 	close(errChan)
 
-		var firstErr error
+	var firstErr error
 	for err := range errChan {
 		if firstErr == nil {
 			firstErr = err
@@ -132,7 +134,8 @@ func (c *Client) getCommitActivityRecent(username string) ([]time.Time, error) {
 	dateSet := make(map[string]bool)
 
 	opts := &github.ListOptions{PerPage: 100}
-	for page := 1; page <= 10; page++ { 		opts.Page = page
+	for page := 1; page <= 10; page++ {
+		opts.Page = page
 		events, resp, err := c.client.Activity.ListEventsPerformedByUser(c.ctx, username, false, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list events: %w", err)
@@ -213,14 +216,14 @@ func (c *Client) getCommitActivityFull(username string) ([]time.Time, error) {
 func (c *Client) getRepoCommits(author, owner, repo string) ([]time.Time, error) {
 	var dates []time.Time
 	opts := &github.CommitsListOptions{
-		Author: author,
+		Author:      author,
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
 
 	for {
 		commits, resp, err := c.client.Repositories.ListCommits(c.ctx, owner, repo, opts)
 		if err != nil {
-						return dates, nil
+			return dates, nil
 		}
 
 		for _, commit := range commits {

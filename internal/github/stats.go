@@ -23,27 +23,27 @@ func (s *StatsCalculator) Calculate(ctx context.Context, username string, fullSc
 		Languages: make(map[string]int64),
 	}
 
-		user, err := s.client.GetUser(username)
+	user, err := s.client.GetUser(username)
 	if err != nil {
 		return nil, err
 	}
 
-		s.populateProfile(stats, user)
+	s.populateProfile(stats, user)
 
-		repos, err := s.client.GetRepositories(username)
+	repos, err := s.client.GetRepositories(username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repositories: %w", err)
 	}
 
-		s.calculateRepoStats(stats, repos)
+	s.calculateRepoStats(stats, repos)
 
-		languages, err := s.client.GetLanguages(repos)
+	languages, err := s.client.GetLanguages(repos)
 	if err != nil {
-				fmt.Printf("Warning: failed to get complete language stats: %v\n", err)
+		fmt.Printf("Warning: failed to get complete language stats: %v\n", err)
 	}
 	stats.Languages = languages
 
-		commitDates, err := s.client.GetCommitActivity(username, fullScan)
+	commitDates, err := s.client.GetCommitActivity(username, fullScan)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commit activity: %w", err)
 	}
@@ -56,7 +56,7 @@ func (s *StatsCalculator) Calculate(ctx context.Context, username string, fullSc
 	stats.MaxStreakEnd = streakInfo.MaxEnd
 	stats.TotalCommitDays = len(streakInfo.CommitDates)
 
-		s.calculateActivityPatterns(stats, commitDates)
+	s.calculateActivityPatterns(stats, commitDates)
 	s.calculateTopRepositories(stats, repos)
 
 	return stats, nil
@@ -118,7 +118,7 @@ func (s *StatsCalculator) calculateStreaks(commitDates []time.Time) *StreakInfo 
 		return &StreakInfo{}
 	}
 
-			dateSet := make(map[string]time.Time)
+	dateSet := make(map[string]time.Time)
 	for _, date := range commitDates {
 		normalized := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
 		dateStr := normalized.Format("2006-01-02")
@@ -127,7 +127,7 @@ func (s *StatsCalculator) calculateStreaks(commitDates []time.Time) *StreakInfo 
 		}
 	}
 
-		var uniqueDates []time.Time
+	var uniqueDates []time.Time
 	for _, date := range dateSet {
 		uniqueDates = append(uniqueDates, date)
 	}
@@ -143,21 +143,21 @@ func (s *StatsCalculator) calculateStreaks(commitDates []time.Time) *StreakInfo 
 		return info
 	}
 
-		currentStreak := 1
+	currentStreak := 1
 	maxStreak := 1
 	currentStart := uniqueDates[0]
 	maxStart := uniqueDates[0]
 	maxEnd := uniqueDates[0]
 
 	for i := 1; i < len(uniqueDates); i++ {
-						daysDiff := int(uniqueDates[i].Sub(uniqueDates[i-1]).Hours() / 24)
+		daysDiff := int(uniqueDates[i].Sub(uniqueDates[i-1]).Hours() / 24)
 
 		if daysDiff == 1 {
-						currentStreak++
+			currentStreak++
 		} else if daysDiff == 0 {
-						continue
+			continue
 		} else {
-						if currentStreak > maxStreak {
+			if currentStreak > maxStreak {
 				maxStreak = currentStreak
 				maxStart = currentStart
 				maxEnd = uniqueDates[i-1]
@@ -167,22 +167,22 @@ func (s *StatsCalculator) calculateStreaks(commitDates []time.Time) *StreakInfo 
 		}
 	}
 
-		if currentStreak > maxStreak {
+	if currentStreak > maxStreak {
 		maxStreak = currentStreak
 		maxStart = currentStart
 		maxEnd = uniqueDates[len(uniqueDates)-1]
 	}
 
-						now := time.Now().UTC()
+	now := time.Now().UTC()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	lastCommit := uniqueDates[len(uniqueDates)-1]
 	daysSinceLastCommit := int(today.Sub(lastCommit).Hours() / 24)
 
-				if daysSinceLastCommit <= 1 {
+	if daysSinceLastCommit <= 1 {
 		info.CurrentStreak = currentStreak
 		info.CurrentStart = currentStart
 	} else {
-				info.CurrentStreak = 0
+		info.CurrentStreak = 0
 	}
 
 	info.MaxStreak = maxStreak
@@ -205,7 +205,7 @@ func (s *StatsCalculator) calculateActivityPatterns(stats *UserStats, commitDate
 		hourCount[date.Hour()]++
 	}
 
-		maxDayCount := 0
+	maxDayCount := 0
 	var mostActiveDay time.Weekday
 	for day, count := range dayCount {
 		if count > maxDayCount {
@@ -215,7 +215,7 @@ func (s *StatsCalculator) calculateActivityPatterns(stats *UserStats, commitDate
 	}
 	stats.MostActiveDay = mostActiveDay.String()
 
-		maxHourCount := 0
+	maxHourCount := 0
 	for hour, count := range hourCount {
 		if count > maxHourCount {
 			maxHourCount = count
@@ -229,7 +229,8 @@ func (s *StatsCalculator) calculateTopRepositories(stats *UserStats, repos []*gi
 
 	for _, repo := range repos {
 		if repo.Fork != nil && *repo.Fork {
-			continue 		}
+			continue
+		}
 
 		r := Repository{
 			IsForked: false,
@@ -259,11 +260,11 @@ func (s *StatsCalculator) calculateTopRepositories(stats *UserStats, repos []*gi
 		repoList = append(repoList, r)
 	}
 
-		sort.Slice(repoList, func(i, j int) bool {
+	sort.Slice(repoList, func(i, j int) bool {
 		return repoList[i].Stars > repoList[j].Stars
 	})
 
-		if len(repoList) > 5 {
+	if len(repoList) > 5 {
 		stats.TopRepositories = repoList[:5]
 	} else {
 		stats.TopRepositories = repoList
@@ -274,16 +275,16 @@ func calculateDuration(start, end time.Time) Duration {
 	years := 0
 	months := 0
 
-		for start.AddDate(years+1, 0, 0).Before(end) || start.AddDate(years+1, 0, 0).Equal(end) {
+	for start.AddDate(years+1, 0, 0).Before(end) || start.AddDate(years+1, 0, 0).Equal(end) {
 		years++
 	}
 
-		start = start.AddDate(years, 0, 0)
+	start = start.AddDate(years, 0, 0)
 	for start.AddDate(0, months+1, 0).Before(end) || start.AddDate(0, months+1, 0).Equal(end) {
 		months++
 	}
 
-		start = start.AddDate(0, months, 0)
+	start = start.AddDate(0, months, 0)
 	days := int(end.Sub(start).Hours() / 24)
 
 	return Duration{
@@ -298,11 +299,11 @@ func GetLanguageStats(languages map[string]int64) *LanguageStats {
 		Languages: languages,
 	}
 
-		for _, bytes := range languages {
+	for _, bytes := range languages {
 		stats.TotalBytes += bytes
 	}
 
-		for lang, bytes := range languages {
+	for lang, bytes := range languages {
 		percentage := 0.0
 		if stats.TotalBytes > 0 {
 			percentage = float64(bytes) / float64(stats.TotalBytes) * 100.0
@@ -314,7 +315,7 @@ func GetLanguageStats(languages map[string]int64) *LanguageStats {
 		})
 	}
 
-		sort.Slice(stats.TopLanguages, func(i, j int) bool {
+	sort.Slice(stats.TopLanguages, func(i, j int) bool {
 		return stats.TopLanguages[i].Bytes > stats.TopLanguages[j].Bytes
 	})
 

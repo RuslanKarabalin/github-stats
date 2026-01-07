@@ -6,21 +6,21 @@ import (
 )
 
 type UserStats struct {
-		Username      string
-	Name          string
-	Bio           string
-	Company       string
-	Location      string
-	Email         string
-	Blog          string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	PublicRepos   int
-	PublicGists   int
-	Followers     int
-	Following     int
+	Username    string
+	Name        string
+	Bio         string
+	Company     string
+	Location    string
+	Email       string
+	Blog        string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	PublicRepos int
+	PublicGists int
+	Followers   int
+	Following   int
 
-		AccountAge         Duration
+	AccountAge         Duration
 	TotalStars         int
 	TotalForks         int
 	CurrentStreak      int
@@ -30,11 +30,13 @@ type UserStats struct {
 	MaxStreakEnd       time.Time
 	TotalCommitDays    int
 
-		Languages map[string]int64 
-		MostActiveDay      string 	MostActiveHour     int    	TopRepositories    []Repository
-	ContributionVelocity float64 
-		OwnRepoCommits     int
-	OtherRepoCommits   int
+	Languages            map[string]int64
+	MostActiveDay        string
+	MostActiveHour       int
+	TopRepositories      []Repository
+	ContributionVelocity float64
+	OwnRepoCommits       int
+	OtherRepoCommits     int
 }
 
 type Repository struct {
@@ -81,8 +83,10 @@ type StreakInfo struct {
 }
 
 type LanguageStats struct {
-	Languages      map[string]int64 	TotalBytes     int64
-	TopLanguages   []LanguageStat }
+	Languages    map[string]int64
+	TotalBytes   int64
+	TopLanguages []LanguageStat
+}
 
 type LanguageStat struct {
 	Name       string

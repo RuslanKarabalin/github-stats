@@ -39,15 +39,15 @@ func (f *Formatter) displayJSON(stats *github.UserStats) error {
 }
 
 func (f *Formatter) displayTable(stats *github.UserStats) error {
-		cyan := color.New(color.FgCyan, color.Bold)
+	cyan := color.New(color.FgCyan, color.Bold)
 	green := color.New(color.FgGreen)
 	blue := color.New(color.FgBlue)
 
-		cyan.Println("\n" + strings.Repeat("=", 80))
+	cyan.Println("\n" + strings.Repeat("=", 80))
 	cyan.Printf("  GitHub Statistics for @%s\n", stats.Username)
 	cyan.Println(strings.Repeat("=", 80))
 
-		fmt.Println()
+	fmt.Println()
 	green.Println("👤 PROFILE")
 	fmt.Println(strings.Repeat("-", 80))
 
@@ -82,7 +82,7 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 
 	table.Render()
 
-		fmt.Println()
+	fmt.Println()
 	green.Println("📚 REPOSITORY STATISTICS")
 	fmt.Println(strings.Repeat("-", 80))
 
@@ -101,7 +101,7 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 
 	table.Render()
 
-		fmt.Println()
+	fmt.Println()
 	green.Println("🔥 COMMIT STREAKS")
 	fmt.Println(strings.Repeat("-", 80))
 
@@ -131,7 +131,7 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 
 	table.Render()
 
-		if stats.MostActiveDay != "" || stats.MostActiveHour > 0 {
+	if stats.MostActiveDay != "" || stats.MostActiveHour > 0 {
 		fmt.Println()
 		green.Println("📊 ACTIVITY PATTERNS")
 		fmt.Println(strings.Repeat("-", 80))
@@ -155,7 +155,7 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 		table.Render()
 	}
 
-		if len(stats.Languages) > 0 {
+	if len(stats.Languages) > 0 {
 		fmt.Println()
 		green.Println("💻 LANGUAGE STATISTICS")
 		fmt.Println(strings.Repeat("-", 80))
@@ -169,7 +169,7 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 		table.SetHeaderLine(false)
 		table.SetAlignment(tablewriter.ALIGN_LEFT)
 
-				count := 10
+		count := 10
 		if len(langStats.TopLanguages) < count {
 			count = len(langStats.TopLanguages)
 		}
@@ -187,7 +187,7 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 		table.Render()
 	}
 
-		if len(stats.TopRepositories) > 0 {
+	if len(stats.TopRepositories) > 0 {
 		fmt.Println()
 		green.Println("🌟 TOP REPOSITORIES (by stars)")
 		fmt.Println(strings.Repeat("-", 80))
@@ -215,7 +215,7 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 		table.Render()
 	}
 
-		fmt.Println()
+	fmt.Println()
 	blue.Println(strings.Repeat("-", 80))
 	blue.Printf("Generated at: %s\n", time.Now().Format("2006-01-02 15:04:05 MST"))
 	blue.Println(strings.Repeat("=", 80))
@@ -223,7 +223,6 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 
 	return nil
 }
-
 
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {

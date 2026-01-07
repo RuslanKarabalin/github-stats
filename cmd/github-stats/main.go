@@ -16,17 +16,17 @@ import (
 )
 
 func main() {
-		cfg, err := config.Load()
+	cfg, err := config.Load()
 	if err != nil {
 		display.DisplayError(fmt.Sprintf("Configuration error: %v", err))
 		os.Exit(1)
 	}
 
-		ctx := context.Background()
+	ctx := context.Background()
 
-		client := github.NewClient(ctx, cfg.Token, cfg.MaxWorkers)
+	client := github.NewClient(ctx, cfg.Token, cfg.MaxWorkers)
 
-		username := cfg.Username
+	username := cfg.Username
 	if username == "" {
 		s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 		s.Suffix = " Getting authenticated user..."
@@ -42,15 +42,15 @@ func main() {
 		display.DisplaySuccess(fmt.Sprintf("Authenticated as: %s", username))
 	}
 
-		if err := checkRateLimit(client); err != nil {
+	if err := checkRateLimit(client); err != nil {
 		display.DisplayWarning(fmt.Sprintf("Rate limit check failed: %v", err))
 	}
 
-		cacheInstance := cache.New(!cfg.NoCache)
+	cacheInstance := cache.New(!cfg.NoCache)
 
-		statsCalc := github.NewStatsCalculator(client)
+	statsCalc := github.NewStatsCalculator(client)
 
-		cyan := color.New(color.FgCyan, color.Bold)
+	cyan := color.New(color.FgCyan, color.Bold)
 	fmt.Println()
 	cyan.Println("🚀 Fetching GitHub statistics...")
 	fmt.Println()
@@ -69,17 +69,17 @@ func main() {
 
 	display.DisplaySuccess("Statistics calculated successfully")
 
-		formatter := display.NewFormatter(cfg.Format)
+	formatter := display.NewFormatter(cfg.Format)
 	if err := formatter.Display(stats); err != nil {
 		display.DisplayError(fmt.Sprintf("Failed to display statistics: %v", err))
 		os.Exit(1)
 	}
 
-		if !cfg.NoCache {
+	if !cfg.NoCache {
 		display.DisplaySuccess("Results cached for faster subsequent queries")
 	}
 
-		cacheInstance.Clear()
+	cacheInstance.Clear()
 }
 
 func checkRateLimit(client *github.Client) error {
