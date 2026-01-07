@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/google/go-github/v57/github"
+	"github.com/google/go-github/v81/github"
 )
 
 type StatsCalculator struct {

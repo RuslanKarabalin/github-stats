@@ -52,7 +52,7 @@ func main() {
 
 	cyan := color.New(color.FgCyan, color.Bold)
 	fmt.Println()
-	cyan.Println("🚀 Fetching GitHub statistics...")
+	_, _ = cyan.Println("🚀 Fetching GitHub statistics...")
 	fmt.Println()
 
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)

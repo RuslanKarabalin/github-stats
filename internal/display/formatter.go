@@ -11,6 +11,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/tw"
 )
 
 type Formatter struct {
@@ -43,131 +44,122 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 	green := color.New(color.FgGreen)
 	blue := color.New(color.FgBlue)
 
-	cyan.Println("\n" + strings.Repeat("=", 80))
-	cyan.Printf("  GitHub Statistics for @%s\n", stats.Username)
-	cyan.Println(strings.Repeat("=", 80))
+	_, _ = cyan.Println("\n" + strings.Repeat("=", 80))
+	_, _ = cyan.Printf("  GitHub Statistics for @%s\n", stats.Username)
+	_, _ = cyan.Println(strings.Repeat("=", 80))
 
 	fmt.Println()
-	green.Println("👤 PROFILE")
+	_, _ = green.Println("👤 PROFILE")
 	fmt.Println(strings.Repeat("-", 80))
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Field", "Value"})
-	table.SetBorder(false)
-	table.SetColumnSeparator("")
-	table.SetRowSeparator("")
-	table.SetHeaderLine(false)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	table.Header("Field", "Value")
+	table.Options(
+		tablewriter.WithAlignment(tw.MakeAlign(2, tw.AlignLeft)),
+	)
 
 	if stats.Name != "" {
-		table.Append([]string{"Name", stats.Name})
+		_ = table.Append([]string{"Name", stats.Name})
 	}
-	table.Append([]string{"Username", stats.Username})
+	_ = table.Append([]string{"Username", stats.Username})
 	if stats.Bio != "" {
-		table.Append([]string{"Bio", truncate(stats.Bio, 60)})
+		_ = table.Append([]string{"Bio", truncate(stats.Bio, 60)})
 	}
 	if stats.Company != "" {
-		table.Append([]string{"Company", stats.Company})
+		_ = table.Append([]string{"Company", stats.Company})
 	}
 	if stats.Location != "" {
-		table.Append([]string{"Location", stats.Location})
+		_ = table.Append([]string{"Location", stats.Location})
 	}
 	if stats.Blog != "" {
-		table.Append([]string{"Website", stats.Blog})
+		_ = table.Append([]string{"Website", stats.Blog})
 	}
-	table.Append([]string{"Joined", stats.CreatedAt.Format("January 2, 2006")})
-	table.Append([]string{"Account Age", stats.AccountAge.String()})
-	table.Append([]string{"Followers", fmt.Sprintf("%d", stats.Followers)})
-	table.Append([]string{"Following", fmt.Sprintf("%d", stats.Following)})
+	_ = table.Append([]string{"Joined", stats.CreatedAt.Format("January 2, 2006")})
+	_ = table.Append([]string{"Account Age", stats.AccountAge.String()})
+	_ = table.Append([]string{"Followers", fmt.Sprintf("%d", stats.Followers)})
+	_ = table.Append([]string{"Following", fmt.Sprintf("%d", stats.Following)})
 
-	table.Render()
+	_ = table.Render()
 
 	fmt.Println()
-	green.Println("📚 REPOSITORY STATISTICS")
+	_, _ = green.Println("📚 REPOSITORY STATISTICS")
 	fmt.Println(strings.Repeat("-", 80))
 
 	table = tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Metric", "Value"})
-	table.SetBorder(false)
-	table.SetColumnSeparator("")
-	table.SetRowSeparator("")
-	table.SetHeaderLine(false)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	table.Header("Metric", "Value")
+	table.Options(
+		tablewriter.WithAlignment(tw.MakeAlign(2, tw.AlignLeft)),
+	)
 
-	table.Append([]string{"Public Repositories", fmt.Sprintf("%d", stats.PublicRepos)})
-	table.Append([]string{"Public Gists", fmt.Sprintf("%d", stats.PublicGists)})
-	table.Append([]string{"Total Stars Received", fmt.Sprintf("%d ⭐", stats.TotalStars)})
-	table.Append([]string{"Total Forks Received", fmt.Sprintf("%d", stats.TotalForks)})
+	_ = table.Append([]string{"Public Repositories", fmt.Sprintf("%d", stats.PublicRepos)})
+	_ = table.Append([]string{"Public Gists", fmt.Sprintf("%d", stats.PublicGists)})
+	_ = table.Append([]string{"Total Stars Received", fmt.Sprintf("%d ⭐", stats.TotalStars)})
+	_ = table.Append([]string{"Total Forks Received", fmt.Sprintf("%d", stats.TotalForks)})
 
-	table.Render()
+	_ = table.Render()
 
 	fmt.Println()
-	green.Println("🔥 COMMIT STREAKS")
+	_, _ = green.Println("🔥 COMMIT STREAKS")
 	fmt.Println(strings.Repeat("-", 80))
 
 	table = tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Metric", "Value"})
-	table.SetBorder(false)
-	table.SetColumnSeparator("")
-	table.SetRowSeparator("")
-	table.SetHeaderLine(false)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	table.Header("Metric", "Value")
+	table.Options(
+		tablewriter.WithAlignment(tw.MakeAlign(2, tw.AlignLeft)),
+	)
 
 	if stats.CurrentStreak > 0 {
-		table.Append([]string{"Current Streak", fmt.Sprintf("%d days 🔥", stats.CurrentStreak)})
-		table.Append([]string{"Current Streak Start", stats.CurrentStreakStart.Format("Jan 2, 2006")})
+		_ = table.Append([]string{"Current Streak", fmt.Sprintf("%d days 🔥", stats.CurrentStreak)})
+		_ = table.Append([]string{"Current Streak Start", stats.CurrentStreakStart.Format("Jan 2, 2006")})
 	} else {
-		table.Append([]string{"Current Streak", "0 days (inactive)"})
+		_ = table.Append([]string{"Current Streak", "0 days (inactive)"})
 	}
 
-	table.Append([]string{"Maximum Streak", fmt.Sprintf("%d days 🏆", stats.MaxStreak)})
+	_ = table.Append([]string{"Maximum Streak", fmt.Sprintf("%d days 🏆", stats.MaxStreak)})
 	if !stats.MaxStreakStart.IsZero() {
 		streakRange := fmt.Sprintf("%s - %s",
 			stats.MaxStreakStart.Format("Jan 2, 2006"),
 			stats.MaxStreakEnd.Format("Jan 2, 2006"))
-		table.Append([]string{"Max Streak Period", streakRange})
+		_ = table.Append([]string{"Max Streak Period", streakRange})
 	}
-	table.Append([]string{"Total Commit Days", fmt.Sprintf("%d", stats.TotalCommitDays)})
+	_ = table.Append([]string{"Total Commit Days", fmt.Sprintf("%d", stats.TotalCommitDays)})
 
-	table.Render()
+	_ = table.Render()
 
 	if stats.MostActiveDay != "" || stats.MostActiveHour > 0 {
 		fmt.Println()
-		green.Println("📊 ACTIVITY PATTERNS")
+		_, _ = green.Println("📊 ACTIVITY PATTERNS")
 		fmt.Println(strings.Repeat("-", 80))
 
 		table = tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"Metric", "Value"})
-		table.SetBorder(false)
-		table.SetColumnSeparator("")
-		table.SetRowSeparator("")
-		table.SetHeaderLine(false)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
+		table.Header("Metric", "Value")
+		table.Options(
+			tablewriter.WithAlignment(tw.MakeAlign(2, tw.AlignLeft)),
+		)
 
 		if stats.MostActiveDay != "" {
-			table.Append([]string{"Most Active Day", stats.MostActiveDay})
+			_ = table.Append([]string{"Most Active Day", stats.MostActiveDay})
 		}
 		if stats.MostActiveHour >= 0 {
 			hourStr := formatHour(stats.MostActiveHour)
-			table.Append([]string{"Most Active Hour", hourStr})
+			_ = table.Append([]string{"Most Active Hour", hourStr})
 		}
 
-		table.Render()
+		_ = table.Render()
 	}
 
 	if len(stats.Languages) > 0 {
 		fmt.Println()
-		green.Println("💻 LANGUAGE STATISTICS")
+		_, _ = green.Println("💻 LANGUAGE STATISTICS")
 		fmt.Println(strings.Repeat("-", 80))
 
 		langStats := github.GetLanguageStats(stats.Languages)
 
 		table = tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"Language", "Bytes", "Percentage"})
-		table.SetBorder(false)
-		table.SetColumnSeparator(" | ")
-		table.SetHeaderLine(false)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
+		table.Header("Language", "Bytes", "Percentage")
+		table.Options(
+			tablewriter.WithAlignment(tw.MakeAlign(3, tw.AlignLeft)),
+		)
 
 		count := 10
 		if len(langStats.TopLanguages) < count {
@@ -176,35 +168,33 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 
 		for i := 0; i < count; i++ {
 			lang := langStats.TopLanguages[i]
-			bar := createBar(lang.Percentage, 30)
-			table.Append([]string{
+			_ = table.Append([]string{
 				lang.Name,
 				formatBytes(lang.Bytes),
-				fmt.Sprintf("%.1f%% %s", lang.Percentage, bar),
+				fmt.Sprintf("%.1f%%", lang.Percentage),
 			})
 		}
 
-		table.Render()
+		_ = table.Render()
 	}
 
 	if len(stats.TopRepositories) > 0 {
 		fmt.Println()
-		green.Println("🌟 TOP REPOSITORIES (by stars)")
+		_, _ = green.Println("🌟 TOP REPOSITORIES (by stars)")
 		fmt.Println(strings.Repeat("-", 80))
 
 		table = tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"Repository", "Stars", "Forks", "Language"})
-		table.SetBorder(false)
-		table.SetColumnSeparator(" | ")
-		table.SetHeaderLine(false)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
+		table.Header("Repository", "Stars", "Forks", "Language")
+		table.Options(
+			tablewriter.WithAlignment(tw.MakeAlign(4, tw.AlignLeft)),
+		)
 
 		for _, repo := range stats.TopRepositories {
 			lang := repo.Language
 			if lang == "" {
 				lang = "N/A"
 			}
-			table.Append([]string{
+			_ = table.Append([]string{
 				repo.Name,
 				fmt.Sprintf("%d ⭐", repo.Stars),
 				fmt.Sprintf("%d", repo.Forks),
@@ -212,13 +202,13 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 			})
 		}
 
-		table.Render()
+		_ = table.Render()
 	}
 
 	fmt.Println()
-	blue.Println(strings.Repeat("-", 80))
-	blue.Printf("Generated at: %s\n", time.Now().Format("2006-01-02 15:04:05 MST"))
-	blue.Println(strings.Repeat("=", 80))
+	_, _ = blue.Println(strings.Repeat("-", 80))
+	_, _ = blue.Printf("Generated at: %s\n", time.Now().Format("2006-01-02 15:04:05 MST"))
+	_, _ = blue.Println(strings.Repeat("=", 80))
 	fmt.Println()
 
 	return nil
@@ -256,31 +246,22 @@ func formatHour(hour int) string {
 	}
 }
 
-func createBar(percentage float64, width int) string {
-	filled := int(percentage / 100.0 * float64(width))
-	if filled > width {
-		filled = width
-	}
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
-	return bar
-}
-
 func DisplayProgress(message string) {
 	cyan := color.New(color.FgCyan)
-	cyan.Printf("⏳ %s...\n", message)
+	_, _ = cyan.Printf("⏳ %s...\n", message)
 }
 
 func DisplaySuccess(message string) {
 	green := color.New(color.FgGreen)
-	green.Printf("✓ %s\n", message)
+	_, _ = green.Printf("✓ %s\n", message)
 }
 
 func DisplayWarning(message string) {
 	yellow := color.New(color.FgYellow)
-	yellow.Printf("⚠ %s\n", message)
+	_, _ = yellow.Printf("⚠ %s\n", message)
 }
 
 func DisplayError(message string) {
 	red := color.New(color.FgRed, color.Bold)
-	red.Printf("✗ %s\n", message)
+	_, _ = red.Printf("✗ %s\n", message)
 }
