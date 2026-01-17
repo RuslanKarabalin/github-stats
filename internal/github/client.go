@@ -1,8 +1,12 @@
 package github
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"sync"
 	"time"
 
@@ -12,8 +16,38 @@ import (
 
 type Client struct {
 	client     *github.Client
+	httpClient *http.Client
+	token      string
 	ctx        context.Context
 	maxWorkers int
+}
+
+const graphQLEndpoint = "https://api.github.com/graphql"
+
+type graphQLRequest struct {
+	Query     string                 `json:"query"`
+	Variables map[string]interface{} `json:"variables"`
+}
+
+type contributionCalendarResponse struct {
+	Data struct {
+		User struct {
+			ContributionsCollection struct {
+				ContributionCalendar struct {
+					TotalContributions int `json:"totalContributions"`
+					Weeks              []struct {
+						ContributionDays []struct {
+							Date              string `json:"date"`
+							ContributionCount int    `json:"contributionCount"`
+						} `json:"contributionDays"`
+					} `json:"weeks"`
+				} `json:"contributionCalendar"`
+			} `json:"contributionsCollection"`
+		} `json:"user"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
 }
 
 func NewClient(ctx context.Context, token string, maxWorkers int) *Client {
@@ -24,6 +58,8 @@ func NewClient(ctx context.Context, token string, maxWorkers int) *Client {
 
 	return &Client{
 		client:     github.NewClient(tc),
+		httpClient: tc,
+		token:      token,
 		ctx:        ctx,
 		maxWorkers: maxWorkers,
 	}
@@ -123,6 +159,11 @@ func (c *Client) GetLanguages(repos []*github.Repository) (map[string]int64, err
 }
 
 func (c *Client) GetCommitActivity(username string, fullScan bool) ([]time.Time, error) {
+	dates, err := c.GetContributionCalendar(username)
+	if err == nil && len(dates) > 0 {
+		return dates, nil
+	}
+
 	if fullScan {
 		return c.getCommitActivityFull(username)
 	}
@@ -236,6 +277,120 @@ func (c *Client) getRepoCommits(author, owner, repo string) ([]time.Time, error)
 			break
 		}
 		opts.Page = resp.NextPage
+	}
+
+	return dates, nil
+}
+
+func (c *Client) GetContributionCalendar(username string) ([]time.Time, error) {
+	now := time.Now().UTC()
+	var allDates []time.Time
+	dateSet := make(map[string]bool)
+
+	for yearsBack := 0; yearsBack < 5; yearsBack++ {
+		to := now.AddDate(-yearsBack, 0, 0)
+		from := to.AddDate(-1, 0, 0)
+
+		if from.After(now) {
+			continue
+		}
+		if to.After(now) {
+			to = now
+		}
+
+		dates, err := c.getContributionsForPeriod(username, from, to)
+		if err != nil {
+			if yearsBack > 0 {
+				break
+			}
+			return nil, err
+		}
+
+		for _, date := range dates {
+			dateStr := date.Format("2006-01-02")
+			if !dateSet[dateStr] {
+				dateSet[dateStr] = true
+				allDates = append(allDates, date)
+			}
+		}
+	}
+
+	return allDates, nil
+}
+
+func (c *Client) getContributionsForPeriod(username string, from, to time.Time) ([]time.Time, error) {
+	query := `
+		query($username: String!, $from: DateTime!, $to: DateTime!) {
+			user(login: $username) {
+				contributionsCollection(from: $from, to: $to) {
+					contributionCalendar {
+						totalContributions
+						weeks {
+							contributionDays {
+								date
+								contributionCount
+							}
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"username": username,
+		"from":     from.Format(time.RFC3339),
+		"to":       to.Format(time.RFC3339),
+	}
+
+	reqBody := graphQLRequest{
+		Query:     query,
+		Variables: variables,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(c.ctx, "POST", graphQLEndpoint, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var result contributionCalendarResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if len(result.Errors) > 0 {
+		return nil, fmt.Errorf("GraphQL error: %s", result.Errors[0].Message)
+	}
+
+	var dates []time.Time
+	for _, week := range result.Data.User.ContributionsCollection.ContributionCalendar.Weeks {
+		for _, day := range week.ContributionDays {
+			if day.ContributionCount > 0 {
+				date, err := time.Parse("2006-01-02", day.Date)
+				if err != nil {
+					continue
+				}
+				dates = append(dates, date)
+			}
+		}
 	}
 
 	return dates, nil
