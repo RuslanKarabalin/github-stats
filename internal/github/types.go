@@ -37,6 +37,10 @@ type UserStats struct {
 	ContributionVelocity float64
 	OwnRepoCommits       int
 	OtherRepoCommits     int
+
+	PRStats     *PullRequestStats
+	IssueStats  *IssueStats
+	ReviewStats *ReviewStats
 }
 
 type Repository struct {
@@ -92,4 +96,30 @@ type LanguageStat struct {
 	Name       string
 	Bytes      int64
 	Percentage float64
+}
+
+type RepoCount struct {
+	RepoName string
+	Count    int
+}
+
+type PullRequestStats struct {
+	Total        int
+	Open         int
+	Closed       int
+	Merged       int
+	AvgMergeTime time.Duration
+	TopRepos     []RepoCount
+}
+
+type IssueStats struct {
+	Total        int
+	Open         int
+	Closed       int
+	AvgCloseTime time.Duration
+}
+
+type ReviewStats struct {
+	Total    int
+	TopRepos []RepoCount
 }

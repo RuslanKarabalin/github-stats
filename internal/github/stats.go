@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/go-github/v81/github"
@@ -58,6 +59,41 @@ func (s *StatsCalculator) Calculate(ctx context.Context, username string, fullSc
 
 	s.calculateActivityPatterns(stats, commitDates)
 	s.calculateTopRepositories(stats, repos)
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	go func() {
+		defer wg.Done()
+		prStats, err := s.client.GetUserPullRequests(username)
+		if err != nil {
+			fmt.Printf("Warning: failed to get PR stats: %v\n", err)
+			return
+		}
+		stats.PRStats = prStats
+	}()
+
+	go func() {
+		defer wg.Done()
+		issueStats, err := s.client.GetUserIssues(username)
+		if err != nil {
+			fmt.Printf("Warning: failed to get issue stats: %v\n", err)
+			return
+		}
+		stats.IssueStats = issueStats
+	}()
+
+	go func() {
+		defer wg.Done()
+		reviewStats, err := s.client.GetUserReviews(username)
+		if err != nil {
+			fmt.Printf("Warning: failed to get review stats: %v\n", err)
+			return
+		}
+		stats.ReviewStats = reviewStats
+	}()
+
+	wg.Wait()
 
 	return stats, nil
 }

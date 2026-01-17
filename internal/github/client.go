@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -402,4 +403,288 @@ func (c *Client) CheckRateLimit() (*github.RateLimits, error) {
 		return nil, fmt.Errorf("failed to check rate limit: %w", err)
 	}
 	return limits, nil
+}
+
+func (c *Client) GetUserPullRequests(username string) (*PullRequestStats, error) {
+	stats := &PullRequestStats{
+		TopRepos: make([]RepoCount, 0),
+	}
+
+	repoCount := make(map[string]int)
+	var mergeTimes []time.Duration
+
+	query := fmt.Sprintf("author:%s is:pr", username)
+	opts := &github.SearchOptions{
+		Sort:        "created",
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+
+	for {
+		result, resp, err := c.client.Search.Issues(c.ctx, query, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to search PRs: %w", err)
+		}
+
+		for _, issue := range result.Issues {
+			stats.Total++
+
+			if issue.RepositoryURL != nil {
+				repoName := extractRepoName(*issue.RepositoryURL)
+				repoCount[repoName]++
+			}
+
+			if issue.State != nil {
+				switch *issue.State {
+				case "open":
+					stats.Open++
+				case "closed":
+					stats.Closed++
+				}
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	mergedQuery := fmt.Sprintf("author:%s is:pr is:merged", username)
+	opts.Page = 0
+
+	for {
+		result, resp, err := c.client.Search.Issues(c.ctx, mergedQuery, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to search merged PRs: %w", err)
+		}
+
+		for _, issue := range result.Issues {
+			stats.Merged++
+			if issue.CreatedAt != nil && issue.ClosedAt != nil {
+				mergeTime := issue.ClosedAt.Sub(issue.CreatedAt.Time)
+				mergeTimes = append(mergeTimes, mergeTime)
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	stats.Closed = stats.Closed - stats.Merged
+
+	if len(mergeTimes) > 0 {
+		var total time.Duration
+		for _, t := range mergeTimes {
+			total += t
+		}
+		stats.AvgMergeTime = total / time.Duration(len(mergeTimes))
+	}
+
+	stats.TopRepos = getTopRepos(repoCount, 5)
+
+	return stats, nil
+}
+
+func (c *Client) GetUserIssues(username string) (*IssueStats, error) {
+	stats := &IssueStats{}
+	var closeTimes []time.Duration
+
+	query := fmt.Sprintf("author:%s is:issue", username)
+	opts := &github.SearchOptions{
+		Sort:        "created",
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+
+	for {
+		result, resp, err := c.client.Search.Issues(c.ctx, query, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to search issues: %w", err)
+		}
+
+		for _, issue := range result.Issues {
+			stats.Total++
+
+			if issue.State != nil {
+				switch *issue.State {
+				case "open":
+					stats.Open++
+				case "closed":
+					stats.Closed++
+					if issue.CreatedAt != nil && issue.ClosedAt != nil {
+						closeTime := issue.ClosedAt.Sub(issue.CreatedAt.Time)
+						closeTimes = append(closeTimes, closeTime)
+					}
+				}
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	if len(closeTimes) > 0 {
+		var total time.Duration
+		for _, t := range closeTimes {
+			total += t
+		}
+		stats.AvgCloseTime = total / time.Duration(len(closeTimes))
+	}
+
+	return stats, nil
+}
+
+type reviewContributionsResponse struct {
+	Data struct {
+		User struct {
+			ContributionsCollection struct {
+				PullRequestReviewContributions struct {
+					TotalCount int `json:"totalCount"`
+					Nodes      []struct {
+						PullRequest struct {
+							Repository struct {
+								NameWithOwner string `json:"nameWithOwner"`
+							} `json:"repository"`
+						} `json:"pullRequest"`
+					} `json:"nodes"`
+					PageInfo struct {
+						HasNextPage bool   `json:"hasNextPage"`
+						EndCursor   string `json:"endCursor"`
+					} `json:"pageInfo"`
+				} `json:"pullRequestReviewContributions"`
+			} `json:"contributionsCollection"`
+		} `json:"user"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+func (c *Client) GetUserReviews(username string) (*ReviewStats, error) {
+	stats := &ReviewStats{
+		TopRepos: make([]RepoCount, 0),
+	}
+
+	repoCount := make(map[string]int)
+	var cursor *string
+
+	for {
+		query := `
+			query($username: String!, $after: String) {
+				user(login: $username) {
+					contributionsCollection {
+						pullRequestReviewContributions(first: 100, after: $after) {
+							totalCount
+							nodes {
+								pullRequest {
+									repository {
+										nameWithOwner
+									}
+								}
+							}
+							pageInfo {
+								hasNextPage
+								endCursor
+							}
+						}
+					}
+				}
+			}
+		`
+
+		variables := map[string]interface{}{
+			"username": username,
+		}
+		if cursor != nil {
+			variables["after"] = *cursor
+		}
+
+		reqBody := graphQLRequest{
+			Query:     query,
+			Variables: variables,
+		}
+
+		jsonBody, err := json.Marshal(reqBody)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request: %w", err)
+		}
+
+		req, err := http.NewRequestWithContext(c.ctx, "POST", graphQLEndpoint, bytes.NewBuffer(jsonBody))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute request: %w", err)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response: %w", err)
+		}
+
+		var result reviewContributionsResponse
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, fmt.Errorf("failed to parse response: %w", err)
+		}
+
+		if len(result.Errors) > 0 {
+			return nil, fmt.Errorf("GraphQL error: %s", result.Errors[0].Message)
+		}
+
+		contributions := result.Data.User.ContributionsCollection.PullRequestReviewContributions
+
+		if stats.Total == 0 {
+			stats.Total = contributions.TotalCount
+		}
+
+		for _, node := range contributions.Nodes {
+			repoName := node.PullRequest.Repository.NameWithOwner
+			repoCount[repoName]++
+		}
+
+		if !contributions.PageInfo.HasNextPage {
+			break
+		}
+		cursor = &contributions.PageInfo.EndCursor
+	}
+
+	stats.TopRepos = getTopRepos(repoCount, 5)
+
+	return stats, nil
+}
+
+func extractRepoName(repoURL string) string {
+	parts := strings.Split(repoURL, "/repos/")
+	if len(parts) == 2 {
+		return parts[1]
+	}
+	return repoURL
+}
+
+func getTopRepos(repoCount map[string]int, limit int) []RepoCount {
+	var repos []RepoCount
+	for name, count := range repoCount {
+		repos = append(repos, RepoCount{RepoName: name, Count: count})
+	}
+
+	for i := 0; i < len(repos); i++ {
+		for j := i + 1; j < len(repos); j++ {
+			if repos[j].Count > repos[i].Count {
+				repos[i], repos[j] = repos[j], repos[i]
+			}
+		}
+	}
+
+	if len(repos) > limit {
+		return repos[:limit]
+	}
+	return repos
 }

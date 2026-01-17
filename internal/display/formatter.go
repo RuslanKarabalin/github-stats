@@ -205,6 +205,81 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 		_ = table.Render()
 	}
 
+	if stats.PRStats != nil && stats.PRStats.Total > 0 {
+		fmt.Println()
+		_, _ = green.Println("🔀 PULL REQUEST STATISTICS")
+		fmt.Println(strings.Repeat("-", 80))
+
+		table = tablewriter.NewWriter(os.Stdout)
+		table.Header("Metric", "Value")
+		table.Options(
+			tablewriter.WithAlignment(tw.MakeAlign(2, tw.AlignLeft)),
+		)
+
+		_ = table.Append([]string{"Total PRs Created", fmt.Sprintf("%d", stats.PRStats.Total)})
+		_ = table.Append([]string{"Open", fmt.Sprintf("%d", stats.PRStats.Open)})
+		_ = table.Append([]string{"Merged", fmt.Sprintf("%d ✓", stats.PRStats.Merged)})
+		_ = table.Append([]string{"Closed (unmerged)", fmt.Sprintf("%d", stats.PRStats.Closed)})
+		if stats.PRStats.AvgMergeTime > 0 {
+			_ = table.Append([]string{"Avg Time to Merge", formatDuration(stats.PRStats.AvgMergeTime)})
+		}
+
+		_ = table.Render()
+
+		if len(stats.PRStats.TopRepos) > 0 {
+			fmt.Println()
+			fmt.Println("  Top Repositories by PR Count:")
+			for _, repo := range stats.PRStats.TopRepos {
+				fmt.Printf("    - %s: %d PRs\n", repo.RepoName, repo.Count)
+			}
+		}
+	}
+
+	if stats.IssueStats != nil && stats.IssueStats.Total > 0 {
+		fmt.Println()
+		_, _ = green.Println("📋 ISSUE STATISTICS")
+		fmt.Println(strings.Repeat("-", 80))
+
+		table = tablewriter.NewWriter(os.Stdout)
+		table.Header("Metric", "Value")
+		table.Options(
+			tablewriter.WithAlignment(tw.MakeAlign(2, tw.AlignLeft)),
+		)
+
+		_ = table.Append([]string{"Total Issues Created", fmt.Sprintf("%d", stats.IssueStats.Total)})
+		_ = table.Append([]string{"Open", fmt.Sprintf("%d", stats.IssueStats.Open)})
+		_ = table.Append([]string{"Closed", fmt.Sprintf("%d ✓", stats.IssueStats.Closed)})
+		if stats.IssueStats.AvgCloseTime > 0 {
+			_ = table.Append([]string{"Avg Time to Close", formatDuration(stats.IssueStats.AvgCloseTime)})
+		}
+
+		_ = table.Render()
+	}
+
+	if stats.ReviewStats != nil && stats.ReviewStats.Total > 0 {
+		fmt.Println()
+		_, _ = green.Println("👀 CODE REVIEW STATISTICS")
+		fmt.Println(strings.Repeat("-", 80))
+
+		table = tablewriter.NewWriter(os.Stdout)
+		table.Header("Metric", "Value")
+		table.Options(
+			tablewriter.WithAlignment(tw.MakeAlign(2, tw.AlignLeft)),
+		)
+
+		_ = table.Append([]string{"Total Reviews", fmt.Sprintf("%d", stats.ReviewStats.Total)})
+
+		_ = table.Render()
+
+		if len(stats.ReviewStats.TopRepos) > 0 {
+			fmt.Println()
+			fmt.Println("  Top Repositories by Review Count:")
+			for _, repo := range stats.ReviewStats.TopRepos {
+				fmt.Printf("    - %s: %d reviews\n", repo.RepoName, repo.Count)
+			}
+		}
+	}
+
 	fmt.Println()
 	_, _ = blue.Println(strings.Repeat("-", 80))
 	_, _ = blue.Printf("Generated at: %s\n", time.Now().Format("2006-01-02 15:04:05 MST"))
@@ -243,6 +318,23 @@ func formatHour(hour int) string {
 		return "12:00 PM"
 	} else {
 		return fmt.Sprintf("%d:00 PM", hour-12)
+	}
+}
+
+func formatDuration(d time.Duration) string {
+	days := int(d.Hours() / 24)
+	switch days {
+	case 0:
+		hours := int(d.Hours())
+		if hours == 0 {
+			minutes := int(d.Minutes())
+			return fmt.Sprintf("%d minutes", minutes)
+		}
+		return fmt.Sprintf("%d hours", hours)
+	case 1:
+		return "1 day"
+	default:
+		return fmt.Sprintf("%d days", days)
 	}
 }
 
