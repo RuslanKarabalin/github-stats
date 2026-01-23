@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github-stats/internal/cache"
 	"github-stats/internal/config"
 	"github-stats/internal/display"
 	"github-stats/internal/github"
@@ -46,8 +45,6 @@ func main() {
 		display.DisplayWarning(fmt.Sprintf("Rate limit check failed: %v", err))
 	}
 
-	cacheInstance := cache.New(!cfg.NoCache)
-
 	statsCalc := github.NewStatsCalculator(client)
 
 	cyan := color.New(color.FgCyan, color.Bold)
@@ -74,12 +71,6 @@ func main() {
 		display.DisplayError(fmt.Sprintf("Failed to display statistics: %v", err))
 		os.Exit(1)
 	}
-
-	if !cfg.NoCache {
-		display.DisplaySuccess("Results cached for faster subsequent queries")
-	}
-
-	cacheInstance.Clear()
 }
 
 func checkRateLimit(client *github.Client) error {

@@ -11,7 +11,6 @@ type Config struct {
 	Token      string
 	Username   string
 	FullScan   bool
-	NoCache    bool
 	Format     string
 	StatsOnly  []string
 	MaxWorkers int
@@ -23,7 +22,6 @@ func Load() (*Config, error) {
 	flag.StringVar(&cfg.Token, "token", "", "GitHub Personal Access Token (overrides GITHUB_TOKEN env)")
 	flag.StringVar(&cfg.Username, "user", "", "GitHub username to analyze (defaults to authenticated user)")
 	flag.BoolVar(&cfg.FullScan, "full", false, "Perform full history scan (slower but complete)")
-	flag.BoolVar(&cfg.NoCache, "no-cache", false, "Disable caching")
 	flag.StringVar(&cfg.Format, "format", "table", "Output format: table, json")
 	statsOnly := flag.String("stats", "", "Comma-separated stats to show: profile,repos,streak,languages,prs,issues,reviews (default: all)")
 	flag.IntVar(&cfg.MaxWorkers, "workers", 10, "Maximum concurrent API requests")
