@@ -408,6 +408,7 @@ func (c *Client) CheckRateLimit() (*github.RateLimits, error) {
 func (c *Client) GetUserPullRequests(username string) (*PullRequestStats, error) {
 	stats := &PullRequestStats{
 		TopRepos: make([]RepoCount, 0),
+		OpenPRs:  make([]OpenPullRequest, 0),
 	}
 
 	repoCount := make(map[string]int)
@@ -428,8 +429,9 @@ func (c *Client) GetUserPullRequests(username string) (*PullRequestStats, error)
 		for _, issue := range result.Issues {
 			stats.Total++
 
+			repoName := ""
 			if issue.RepositoryURL != nil {
-				repoName := extractRepoName(*issue.RepositoryURL)
+				repoName = extractRepoName(*issue.RepositoryURL)
 				repoCount[repoName]++
 			}
 
@@ -437,6 +439,22 @@ func (c *Client) GetUserPullRequests(username string) (*PullRequestStats, error)
 				switch *issue.State {
 				case "open":
 					stats.Open++
+					openPR := OpenPullRequest{
+						RepoName: repoName,
+					}
+					if issue.Title != nil {
+						openPR.Title = *issue.Title
+					}
+					if issue.Number != nil {
+						openPR.Number = *issue.Number
+					}
+					if issue.CreatedAt != nil {
+						openPR.CreatedAt = issue.CreatedAt.Time
+					}
+					if issue.HTMLURL != nil {
+						openPR.URL = *issue.HTMLURL
+					}
+					stats.OpenPRs = append(stats.OpenPRs, openPR)
 				case "closed":
 					stats.Closed++
 				}

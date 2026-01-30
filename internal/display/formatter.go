@@ -229,9 +229,40 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 		if len(stats.PRStats.TopRepos) > 0 {
 			fmt.Println()
 			fmt.Println("  Top Repositories by PR Count:")
+
+			table = tablewriter.NewWriter(os.Stdout)
+			table.Header("Repository", "PRs")
+			table.Options(
+				tablewriter.WithAlignment(tw.MakeAlign(2, tw.AlignLeft)),
+			)
+
 			for _, repo := range stats.PRStats.TopRepos {
-				fmt.Printf("    - %s: %d PRs\n", repo.RepoName, repo.Count)
+				_ = table.Append([]string{repo.RepoName, fmt.Sprintf("%d", repo.Count)})
 			}
+
+			_ = table.Render()
+		}
+
+		if len(stats.PRStats.OpenPRs) > 0 {
+			fmt.Println()
+			fmt.Println("  Currently Open Pull Requests:")
+
+			table = tablewriter.NewWriter(os.Stdout)
+			table.Header("Repository", "#", "Title", "Created")
+			table.Options(
+				tablewriter.WithAlignment(tw.MakeAlign(4, tw.AlignLeft)),
+			)
+
+			for _, pr := range stats.PRStats.OpenPRs {
+				_ = table.Append([]string{
+					pr.RepoName,
+					fmt.Sprintf("%d", pr.Number),
+					truncate(pr.Title, 40),
+					pr.CreatedAt.Format("Jan 2, 2006"),
+				})
+			}
+
+			_ = table.Render()
 		}
 	}
 
@@ -274,9 +305,18 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 		if len(stats.ReviewStats.TopRepos) > 0 {
 			fmt.Println()
 			fmt.Println("  Top Repositories by Review Count:")
+
+			table = tablewriter.NewWriter(os.Stdout)
+			table.Header("Repository", "Reviews")
+			table.Options(
+				tablewriter.WithAlignment(tw.MakeAlign(2, tw.AlignLeft)),
+			)
+
 			for _, repo := range stats.ReviewStats.TopRepos {
-				fmt.Printf("    - %s: %d reviews\n", repo.RepoName, repo.Count)
+				_ = table.Append([]string{repo.RepoName, fmt.Sprintf("%d", repo.Count)})
 			}
+
+			_ = table.Render()
 		}
 	}
 

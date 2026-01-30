@@ -103,6 +103,14 @@ type RepoCount struct {
 	Count    int
 }
 
+type OpenPullRequest struct {
+	Title     string
+	RepoName  string
+	Number    int
+	CreatedAt time.Time
+	URL       string
+}
+
 type PullRequestStats struct {
 	Total        int
 	Open         int
@@ -110,6 +118,7 @@ type PullRequestStats struct {
 	Merged       int
 	AvgMergeTime time.Duration
 	TopRepos     []RepoCount
+	OpenPRs      []OpenPullRequest
 }
 
 type IssueStats struct {
