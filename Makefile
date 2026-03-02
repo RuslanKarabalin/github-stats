@@ -51,11 +51,11 @@ run: build
 	@echo "Running $(BINARY_NAME)..."
 	$(BUILD_DIR)/$(BINARY_NAME)
 
-run-user:
+user:
 	@echo "Running $(BINARY_NAME) with user flag..."
 	$(BUILD_DIR)/$(BINARY_NAME) --user $(USER)
 
-run-full:
+full:
 	@echo "Running $(BINARY_NAME) with full scan..."
 	$(BUILD_DIR)/$(BINARY_NAME) --user $(USER) --full
 
@@ -78,8 +78,8 @@ help:
 	@echo "  install    - Install binary to /usr/local/bin"
 	@echo "  uninstall  - Remove binary from /usr/local/bin"
 	@echo "  run        - Build and run the application"
-	@echo "  run-user   - Run with USER env var (make run-user USER=octocat)"
-	@echo "  run-full   - Run with full scan (make run-full USER=octocat)"
+	@echo "  user       - Run with USER env var (make run-user USER=octocat)"
+	@echo "  full       - Run with full scan (make run-full USER=octocat)"
 	@echo "  fmt        - Format code"
 	@echo "  lint       - Run linter"
 	@echo "  help       - Show this help message"
