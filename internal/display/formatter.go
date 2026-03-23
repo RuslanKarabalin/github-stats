@@ -231,7 +231,7 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 			fmt.Println("  Top Repositories by PR Count:")
 
 			table = tablewriter.NewWriter(os.Stdout)
-			table.Header("Repository", "PRs")
+			table.Header("Repository", "PR")
 			table.Options(
 				tablewriter.WithAlignment(tw.MakeAlign(2, tw.AlignLeft)),
 			)
