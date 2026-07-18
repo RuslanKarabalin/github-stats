@@ -61,7 +61,17 @@ func (s *StatsCalculator) Calculate(ctx context.Context, username string, fullSc
 	s.calculateTopRepositories(stats, repos)
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4)
+
+	go func() {
+		defer wg.Done()
+		topByCommits, err := s.client.GetTopReposByCommits(username, repos, 5)
+		if err != nil {
+			fmt.Printf("Warning: failed to get top repos by commits: %v\n", err)
+			return
+		}
+		stats.TopReposByCommits = topByCommits
+	}()
 
 	go func() {
 		defer wg.Done()

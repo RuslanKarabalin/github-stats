@@ -34,6 +34,7 @@ type UserStats struct {
 	MostActiveDay        string
 	MostActiveHour       int
 	TopRepositories      []Repository
+	TopReposByCommits    []RepoCount
 	ContributionVelocity float64
 	OwnRepoCommits       int
 	OtherRepoCommits     int

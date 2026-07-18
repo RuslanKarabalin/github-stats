@@ -205,6 +205,24 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 		_ = table.Render()
 	}
 
+	if len(stats.TopReposByCommits) > 0 {
+		fmt.Println()
+		_, _ = green.Println("📈 TOP REPOSITORIES (by commits)")
+		fmt.Println(strings.Repeat("-", 80))
+
+		table = tablewriter.NewWriter(os.Stdout)
+		table.Header("Repository", "Commits")
+		table.Options(
+			tablewriter.WithAlignment(tw.MakeAlign(2, tw.AlignLeft)),
+		)
+
+		for _, repo := range stats.TopReposByCommits {
+			_ = table.Append([]string{repo.RepoName, fmt.Sprintf("%d", repo.Count)})
+		}
+
+		_ = table.Render()
+	}
+
 	if stats.PRStats != nil && stats.PRStats.Total > 0 {
 		fmt.Println()
 		_, _ = green.Println("🔀 PULL REQUEST STATISTICS")

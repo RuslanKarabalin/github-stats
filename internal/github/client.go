@@ -283,6 +283,60 @@ func (c *Client) getRepoCommits(author, owner, repo string) ([]time.Time, error)
 	return dates, nil
 }
 
+func (c *Client) GetTopReposByCommits(username string, repos []*github.Repository, limit int) ([]RepoCount, error) {
+	repoCount := make(map[string]int)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	sem := make(chan struct{}, c.maxWorkers)
+
+	for _, repo := range repos {
+		if repo.Fork != nil && *repo.Fork {
+			continue
+		}
+
+		wg.Add(1)
+		go func(r *github.Repository) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			count := c.countRepoCommits(username, *r.Owner.Login, *r.Name)
+			if count == 0 {
+				return
+			}
+
+			mu.Lock()
+			repoCount[*r.Name] = count
+			mu.Unlock()
+		}(repo)
+	}
+
+	wg.Wait()
+
+	return getTopRepos(repoCount, limit), nil
+}
+
+func (c *Client) countRepoCommits(author, owner, repo string) int {
+	opts := &github.CommitsListOptions{
+		Author:      author,
+		ListOptions: github.ListOptions{PerPage: 1},
+	}
+
+	commits, resp, err := c.client.Repositories.ListCommits(c.ctx, owner, repo, opts)
+	if err != nil {
+		return 0
+	}
+
+	// With PerPage=1, GitHub's Link header exposes the last page number,
+	// which equals the total number of commits by the author.
+	if resp.LastPage > 0 {
+		return resp.LastPage
+	}
+
+	return len(commits)
+}
+
 func (c *Client) GetContributionCalendar(username string) ([]time.Time, error) {
 	now := time.Now().UTC()
 	var allDates []time.Time
