@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github-stats/internal/config"
 	"github-stats/internal/display"
 	"github-stats/internal/github"
+	"github-stats/internal/web"
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
@@ -21,7 +24,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	client := github.NewClient(ctx, cfg.Token, cfg.MaxWorkers)
 
@@ -69,6 +73,22 @@ func main() {
 	}
 
 	display.DisplaySuccess("Statistics calculated successfully")
+
+	if cfg.Web {
+		server, err := web.New(stats, "127.0.0.1", cfg.Port)
+		if err != nil {
+			display.DisplayError(fmt.Sprintf("Failed to start web server: %v", err))
+			os.Exit(1)
+		}
+
+		display.DisplaySuccess(fmt.Sprintf("Serving statistics at %s (press Ctrl+C to stop)", server.URL()))
+
+		if err := server.Run(ctx); err != nil {
+			display.DisplayError(fmt.Sprintf("Web server error: %v", err))
+			os.Exit(1)
+		}
+		return
+	}
 
 	formatter := display.NewFormatter(cfg.Format)
 	if err := formatter.Display(stats); err != nil {

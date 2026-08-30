@@ -8,6 +8,7 @@ import (
 type UserStats struct {
 	Username    string
 	Name        string
+	AvatarURL   string
 	Bio         string
 	Company     string
 	Location    string

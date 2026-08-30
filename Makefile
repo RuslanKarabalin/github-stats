@@ -11,7 +11,7 @@ GOMOD=$(GOCMD) mod
 
 LDFLAGS=-ldflags "-s -w"
 
-.PHONY: all build clean test deps install run help
+.PHONY: all build clean test deps install run web help
 
 all: deps build
 
@@ -59,6 +59,10 @@ full:
 	@echo "Running $(BINARY_NAME) with full scan..."
 	$(BUILD_DIR)/$(BINARY_NAME) --user $(USER) --full
 
+web:
+	@echo "Running $(BINARY_NAME) with web output..."
+	$(BUILD_DIR)/$(BINARY_NAME) --user $(USER) --web
+
 fmt:
 	@echo "Formatting code..."
 	$(GOCMD) fmt ./...
@@ -80,6 +84,7 @@ help:
 	@echo "  run        - Build and run the application"
 	@echo "  user       - Run with USER env var (make run-user USER=octocat)"
 	@echo "  full       - Run with full scan (make run-full USER=octocat)"
+	@echo "  web        - Serve statistics on localhost (make web USER=octocat)"
 	@echo "  fmt        - Format code"
 	@echo "  lint       - Run linter"
 	@echo "  help       - Show this help message"

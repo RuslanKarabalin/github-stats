@@ -128,6 +128,9 @@ func (s *StatsCalculator) populateProfile(stats *UserStats, user *github.User) {
 	if user.Name != nil {
 		stats.Name = *user.Name
 	}
+	if user.AvatarURL != nil {
+		stats.AvatarURL = *user.AvatarURL
+	}
 	if user.Bio != nil {
 		stats.Bio = *user.Bio
 	}

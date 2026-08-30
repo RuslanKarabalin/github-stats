@@ -12,6 +12,8 @@ type Config struct {
 	FullScan   bool
 	Format     string
 	MaxWorkers int
+	Web        bool
+	Port       int
 }
 
 func Load() (*Config, error) {
@@ -22,6 +24,8 @@ func Load() (*Config, error) {
 	flag.BoolVar(&cfg.FullScan, "full", false, "Perform full history scan (slower but complete)")
 	flag.StringVar(&cfg.Format, "format", "table", "Output format: table, json")
 	flag.IntVar(&cfg.MaxWorkers, "workers", 10, "Maximum concurrent API requests")
+	flag.BoolVar(&cfg.Web, "web", false, "Serve the statistics as a page on localhost instead of printing them (ignores --format)")
+	flag.IntVar(&cfg.Port, "port", 8080, "Port to listen on with --web (0 picks a free port)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: github-stats [options]\n\n")
@@ -31,6 +35,7 @@ func Load() (*Config, error) {
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  github-stats --user octocat\n")
 		fmt.Fprintf(os.Stderr, "  github-stats --user octocat --full --format json\n")
+		fmt.Fprintf(os.Stderr, "  github-stats --user octocat --web --port 3000\n")
 		fmt.Fprintf(os.Stderr, "  github-stats --token ghp_xxx --user octocat\n")
 		fmt.Fprintf(os.Stderr, "\nAuthentication:\n")
 		fmt.Fprintf(os.Stderr, "  Set GITHUB_TOKEN environment variable or use --token flag\n")
@@ -53,6 +58,10 @@ func Load() (*Config, error) {
 
 	if cfg.MaxWorkers < 1 || cfg.MaxWorkers > 50 {
 		return nil, fmt.Errorf("workers must be between 1 and 50")
+	}
+
+	if cfg.Port < 0 || cfg.Port > 65535 {
+		return nil, fmt.Errorf("port must be between 0 and 65535")
 	}
 
 	return cfg, nil

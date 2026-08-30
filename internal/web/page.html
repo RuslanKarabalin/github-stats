@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GitHub Statistics · @{{.Stats.Username}}</title>
+<style>
+:root {
+  color-scheme: light;
+  --plane: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --line: #c3c2b7;
+  --ring: rgba(11, 11, 11, 0.10);
+  --accent: #2a78d6;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --line: #383835;
+    --ring: rgba(255, 255, 255, 0.10);
+    --accent: #3987e5;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 32px 20px 56px;
+  background: var(--plane);
+  color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--ring);
+  border-radius: 12px;
+  padding: 20px 22px;
+}
+
+.card h2 {
+  margin: 0 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.card h3 {
+  margin: 22px 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.columns {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.profile {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 1px solid var(--ring);
+  flex: none;
+}
+
+.identity { flex: 1 1 260px; }
+
+.identity h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.handle {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.bio {
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  max-width: 60ch;
+}
+
+.meta {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta li {
+  border: 1px solid var(--ring);
+  border-radius: 999px;
+  padding: 3px 11px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.meta a { color: var(--accent); text-decoration: none; }
+.meta a:hover { text-decoration: underline; }
+
+.tiles {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.tile {
+  border: 1px solid var(--ring);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.tile .label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tile .value {
+  margin-top: 4px;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.streak {
+  display: flex;
+  gap: 28px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.hero { flex: 1 1 200px; }
+
+.hero .value {
+  font-size: 56px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.hero .unit {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--ink-2);
+  margin-left: 6px;
+}
+
+.hero .label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.hero .period {
+  margin-top: 8px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.streak .tiles { flex: 2 1 320px; }
+
+.langbar {
+  display: flex;
+  gap: 2px;
+  height: 28px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.langbar span {
+  flex-grow: 0;
+  flex-shrink: 1;
+  min-width: 3px;
+  transition: opacity 0.12s ease;
+}
+
+.langbar span:hover { opacity: 0.72; }
+
+.legend {
+  display: grid;
+  gap: 8px 20px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.legend .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.legend .name { flex: 1; }
+
+.legend .pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.legend .size {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 72px;
+  text-align: right;
+}
+
+.s0 { background: var(--line); }
+.s1 { background: var(--series-1); }
+.s2 { background: var(--series-2); }
+.s3 { background: var(--series-3); }
+.s4 { background: var(--series-4); }
+.s5 { background: var(--series-5); }
+.s6 { background: var(--series-6); }
+.s7 { background: var(--series-7); }
+.s8 { background: var(--series-8); }
+
+.bars {
+  display: grid;
+  gap: 12px;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1.1fr) 2fr auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.bar-row .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+
+.bar-row .fill {
+  height: 12px;
+  background: var(--accent);
+  border-radius: 0 4px 4px 0;
+  transition: opacity 0.12s ease;
+}
+
+.bar-row:hover .fill { opacity: 0.78; }
+
+.bar-row .value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  min-width: 48px;
+  text-align: right;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0 12px 8px 0;
+  border-bottom: 1px solid var(--grid);
+}
+
+td {
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px solid var(--grid);
+  vertical-align: top;
+}
+
+tr:last-child td { border-bottom: none; }
+
+td.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding-right: 0;
+}
+
+th.num { text-align: right; padding-right: 0; }
+
+td a { color: var(--accent); text-decoration: none; }
+td a:hover { text-decoration: underline; }
+
+.muted { color: var(--muted); }
+
+footer {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  padding-top: 4px;
+}
+</style>
+</head>
+<body>
+<main class="page">
+
+  <section class="card profile">
+    {{if .Stats.AvatarURL}}<img class="avatar" src="{{.Stats.AvatarURL}}" alt="" referrerpolicy="no-referrer">{{end}}
+    <div class="identity">
+      <h1>{{if .Stats.Name}}{{.Stats.Name}}{{else}}{{.Stats.Username}}{{end}}</h1>
+      <p class="handle">@{{.Stats.Username}}</p>
+      {{if .Stats.Bio}}<p class="bio">{{.Stats.Bio}}</p>{{end}}
+      <ul class="meta">
+        {{if .Stats.Company}}<li>{{.Stats.Company}}</li>{{end}}
+        {{if .Stats.Location}}<li>{{.Stats.Location}}</li>{{end}}
+        {{if .Stats.Blog}}<li><a href="{{.Stats.Blog}}" rel="noreferrer">{{.Stats.Blog}}</a></li>{{end}}
+        <li>Joined {{date .Stats.CreatedAt}}</li>
+        <li>{{.Stats.AccountAge}} on GitHub</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Profile</h2>
+    <div class="tiles">
+      <div class="tile"><div class="label">Followers</div><div class="value">{{count .Stats.Followers}}</div></div>
+      <div class="tile"><div class="label">Following</div><div class="value">{{count .Stats.Following}}</div></div>
+      <div class="tile"><div class="label">Public repositories</div><div class="value">{{count .Stats.PublicRepos}}</div></div>
+      <div class="tile"><div class="label">Public gists</div><div class="value">{{count .Stats.PublicGists}}</div></div>
+      <div class="tile"><div class="label">Stars received</div><div class="value">{{count .Stats.TotalStars}}</div></div>
+      <div class="tile"><div class="label">Forks received</div><div class="value">{{count .Stats.TotalForks}}</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Contribution streaks</h2>
+    <div class="streak">
+      <div class="hero">
+        <div class="label">Longest streak</div>
+        <div><span class="value">{{count .Stats.MaxStreak}}</span><span class="unit">days</span></div>
+        {{if not .Stats.MaxStreakStart.IsZero}}
+          <div class="period">{{date .Stats.MaxStreakStart}} — {{date .Stats.MaxStreakEnd}}</div>
+        {{end}}
+      </div>
+      <div class="tiles">
+        <div class="tile">
+          <div class="label">Current streak</div>
+          <div class="value">{{count .Stats.CurrentStreak}}</div>
+          {{if gt .Stats.CurrentStreak 0}}<div class="label">since {{date .Stats.CurrentStreakStart}}</div>{{end}}
+        </div>
+        <div class="tile"><div class="label">Total active days</div><div class="value">{{count .Stats.TotalCommitDays}}</div></div>
+        {{if .Stats.MostActiveDay}}
+          <div class="tile"><div class="label">Most active day</div><div class="value">{{.Stats.MostActiveDay}}</div></div>
+        {{end}}
+        {{if ge .Stats.MostActiveHour 0}}
+          <div class="tile"><div class="label">Most active hour</div><div class="value">{{hour .Stats.MostActiveHour}}</div></div>
+        {{end}}
+      </div>
+    </div>
+  </section>
+
+  {{if .Languages}}
+  <section class="card">
+    <h2>Languages</h2>
+    <div class="langbar">
+      {{range .Languages}}<span class="s{{.Slot}}" style="{{.Style}}" title="{{.Name}} · {{printf "%.1f" .Pct}}% · {{.Bytes}}"></span>{{end}}
+    </div>
+    <ul class="legend">
+      {{range .Languages}}
+      <li>
+        <span class="swatch s{{.Slot}}"></span>
+        <span class="name">{{.Name}}</span>
+        <span class="pct">{{printf "%.1f" .Pct}}%</span>
+        <span class="size">{{.Bytes}}</span>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  <div class="columns">
+    {{if .Stats.TopRepositories}}
+    <section class="card">
+      <h2>Top repositories by stars</h2>
+      <table>
+        <thead><tr><th>Repository</th><th>Language</th><th class="num">Stars</th><th class="num">Forks</th></tr></thead>
+        <tbody>
+          {{range .Stats.TopRepositories}}
+          <tr>
+            <td>{{.Name}}</td>
+            <td class="muted">{{if .Language}}{{.Language}}{{else}}—{{end}}</td>
+            <td class="num">{{count .Stars}}</td>
+            <td class="num">{{count .Forks}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+    {{end}}
+
+    {{if .CommitBars}}
+    <section class="card">
+      <h2>Top repositories by commits</h2>
+      <div class="bars">
+        {{range .CommitBars}}
+        <div class="bar-row" title="{{.Label}} · {{.Value}} commits">
+          <div class="name">{{.Label}}</div>
+          <div><div class="fill" style="{{.Style}}"></div></div>
+          <div class="value">{{.Value}}</div>
+        </div>
+        {{end}}
+      </div>
+    </section>
+    {{end}}
+  </div>
+
+  {{with .Stats.PRStats}}
+  {{if gt .Total 0}}
+  <section class="card">
+    <h2>Pull requests</h2>
+    <div class="tiles">
+      <div class="tile"><div class="label">Created</div><div class="value">{{count .Total}}</div></div>
+      <div class="tile"><div class="label">Open</div><div class="value">{{count .Open}}</div></div>
+      <div class="tile"><div class="label">Merged</div><div class="value">{{count .Merged}}</div></div>
+      <div class="tile"><div class="label">Closed unmerged</div><div class="value">{{count .Closed}}</div></div>
+      {{if gt .AvgMergeTime 0}}
+        <div class="tile"><div class="label">Avg time to merge</div><div class="value">{{duration .AvgMergeTime}}</div></div>
+      {{end}}
+    </div>
+
+    {{if $.PRBars}}
+    <h3>Top repositories by pull requests</h3>
+    <div class="bars">
+      {{range $.PRBars}}
+      <div class="bar-row" title="{{.Label}} · {{.Value}} pull requests">
+        <div class="name">{{.Label}}</div>
+        <div><div class="fill" style="{{.Style}}"></div></div>
+        <div class="value">{{.Value}}</div>
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+
+    {{if .OpenPRs}}
+    <h3>Currently open</h3>
+    <table>
+      <thead><tr><th>Repository</th><th>Title</th><th class="num">Opened</th></tr></thead>
+      <tbody>
+        {{range .OpenPRs}}
+        <tr>
+          <td class="muted">{{.RepoName}}</td>
+          <td><a href="{{.URL}}" rel="noreferrer">#{{.Number}} {{.Title}}</a></td>
+          <td class="num">{{date .CreatedAt}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{end}}
+  </section>
+  {{end}}
+  {{end}}
+
+  <div class="columns">
+    {{with .Stats.IssueStats}}
+    {{if gt .Total 0}}
+    <section class="card">
+      <h2>Issues</h2>
+      <div class="tiles">
+        <div class="tile"><div class="label">Created</div><div class="value">{{count .Total}}</div></div>
+        <div class="tile"><div class="label">Open</div><div class="value">{{count .Open}}</div></div>
+        <div class="tile"><div class="label">Closed</div><div class="value">{{count .Closed}}</div></div>
+        {{if gt .AvgCloseTime 0}}
+          <div class="tile"><div class="label">Avg time to close</div><div class="value">{{duration .AvgCloseTime}}</div></div>
+        {{end}}
+      </div>
+    </section>
+    {{end}}
+    {{end}}
+
+    {{with .Stats.ReviewStats}}
+    {{if gt .Total 0}}
+    <section class="card">
+      <h2>Code reviews</h2>
+      <div class="tiles">
+        <div class="tile"><div class="label">Reviews submitted</div><div class="value">{{count .Total}}</div></div>
+      </div>
+      {{if $.ReviewBars}}
+      <h3>Top repositories by reviews</h3>
+      <div class="bars">
+        {{range $.ReviewBars}}
+        <div class="bar-row" title="{{.Label}} · {{.Value}} reviews">
+          <div class="name">{{.Label}}</div>
+          <div><div class="fill" style="{{.Style}}"></div></div>
+          <div class="value">{{.Value}}</div>
+        </div>
+        {{end}}
+      </div>
+      {{end}}
+    </section>
+    {{end}}
+    {{end}}
+  </div>
+
+  <footer>Generated at {{.GeneratedAt}}</footer>
+
+</main>
+</body>
+</html>
