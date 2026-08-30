@@ -328,8 +328,6 @@ func (c *Client) countRepoCommits(author, owner, repo string) int {
 		return 0
 	}
 
-	// With PerPage=1, GitHub's Link header exposes the last page number,
-	// which equals the total number of commits by the author.
 	if resp.LastPage > 0 {
 		return resp.LastPage
 	}

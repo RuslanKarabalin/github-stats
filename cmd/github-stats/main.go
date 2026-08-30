@@ -64,6 +64,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	for _, warning := range statsCalc.Warnings() {
+		display.DisplayWarning(warning)
+	}
+
 	display.DisplaySuccess("Statistics calculated successfully")
 
 	formatter := display.NewFormatter(cfg.Format)

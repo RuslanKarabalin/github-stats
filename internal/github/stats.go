@@ -12,16 +12,32 @@ import (
 
 type StatsCalculator struct {
 	client *Client
+
+	mu       sync.Mutex
+	warnings []string
 }
 
 func NewStatsCalculator(client *Client) *StatsCalculator {
 	return &StatsCalculator{client: client}
 }
 
+func (s *StatsCalculator) Warnings() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.warnings...)
+}
+
+func (s *StatsCalculator) addWarning(format string, args ...any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.warnings = append(s.warnings, fmt.Sprintf(format, args...))
+}
+
 func (s *StatsCalculator) Calculate(ctx context.Context, username string, fullScan bool) (*UserStats, error) {
 	stats := &UserStats{
-		Username:  username,
-		Languages: make(map[string]int64),
+		Username:       username,
+		Languages:      make(map[string]int64),
+		MostActiveHour: -1,
 	}
 
 	user, err := s.client.GetUser(username)
@@ -40,7 +56,7 @@ func (s *StatsCalculator) Calculate(ctx context.Context, username string, fullSc
 
 	languages, err := s.client.GetLanguages(repos)
 	if err != nil {
-		fmt.Printf("Warning: failed to get complete language stats: %v\n", err)
+		s.addWarning("failed to get complete language stats: %v", err)
 	}
 	stats.Languages = languages
 
@@ -67,7 +83,7 @@ func (s *StatsCalculator) Calculate(ctx context.Context, username string, fullSc
 		defer wg.Done()
 		topByCommits, err := s.client.GetTopReposByCommits(username, repos, 5)
 		if err != nil {
-			fmt.Printf("Warning: failed to get top repos by commits: %v\n", err)
+			s.addWarning("failed to get top repos by commits: %v", err)
 			return
 		}
 		stats.TopReposByCommits = topByCommits
@@ -77,7 +93,7 @@ func (s *StatsCalculator) Calculate(ctx context.Context, username string, fullSc
 		defer wg.Done()
 		prStats, err := s.client.GetUserPullRequests(username)
 		if err != nil {
-			fmt.Printf("Warning: failed to get PR stats: %v\n", err)
+			s.addWarning("failed to get PR stats: %v", err)
 			return
 		}
 		stats.PRStats = prStats
@@ -87,7 +103,7 @@ func (s *StatsCalculator) Calculate(ctx context.Context, username string, fullSc
 		defer wg.Done()
 		issueStats, err := s.client.GetUserIssues(username)
 		if err != nil {
-			fmt.Printf("Warning: failed to get issue stats: %v\n", err)
+			s.addWarning("failed to get issue stats: %v", err)
 			return
 		}
 		stats.IssueStats = issueStats
@@ -97,7 +113,7 @@ func (s *StatsCalculator) Calculate(ctx context.Context, username string, fullSc
 		defer wg.Done()
 		reviewStats, err := s.client.GetUserReviews(username)
 		if err != nil {
-			fmt.Printf("Warning: failed to get review stats: %v\n", err)
+			s.addWarning("failed to get review stats: %v", err)
 			return
 		}
 		stats.ReviewStats = reviewStats
@@ -245,26 +261,34 @@ func (s *StatsCalculator) calculateActivityPatterns(stats *UserStats, commitDate
 
 	dayCount := make(map[time.Weekday]int)
 	hourCount := make(map[int]int)
+	hasTimeOfDay := false
 
 	for _, date := range commitDates {
 		dayCount[date.Weekday()]++
 		hourCount[date.Hour()]++
+		if date.Hour() != 0 || date.Minute() != 0 || date.Second() != 0 {
+			hasTimeOfDay = true
+		}
 	}
 
 	maxDayCount := 0
 	var mostActiveDay time.Weekday
-	for day, count := range dayCount {
-		if count > maxDayCount {
-			maxDayCount = count
+	for day := time.Sunday; day <= time.Saturday; day++ {
+		if dayCount[day] > maxDayCount {
+			maxDayCount = dayCount[day]
 			mostActiveDay = day
 		}
 	}
 	stats.MostActiveDay = mostActiveDay.String()
 
+	if !hasTimeOfDay {
+		return
+	}
+
 	maxHourCount := 0
-	for hour, count := range hourCount {
-		if count > maxHourCount {
-			maxHourCount = count
+	for hour := range 24 {
+		if hourCount[hour] > maxHourCount {
+			maxHourCount = hourCount[hour]
 			stats.MostActiveHour = hour
 		}
 	}

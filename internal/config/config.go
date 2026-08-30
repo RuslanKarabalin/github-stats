@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 )
 
 type Config struct {
@@ -12,7 +11,6 @@ type Config struct {
 	Username   string
 	FullScan   bool
 	Format     string
-	StatsOnly  []string
 	MaxWorkers int
 }
 
@@ -23,7 +21,6 @@ func Load() (*Config, error) {
 	flag.StringVar(&cfg.Username, "user", "", "GitHub username to analyze (defaults to authenticated user)")
 	flag.BoolVar(&cfg.FullScan, "full", false, "Perform full history scan (slower but complete)")
 	flag.StringVar(&cfg.Format, "format", "table", "Output format: table, json")
-	statsOnly := flag.String("stats", "", "Comma-separated stats to show: profile,repos,streak,languages,prs,issues,reviews (default: all)")
 	flag.IntVar(&cfg.MaxWorkers, "workers", 10, "Maximum concurrent API requests")
 
 	flag.Usage = func() {
@@ -42,13 +39,6 @@ func Load() (*Config, error) {
 
 	flag.Parse()
 
-	if *statsOnly != "" {
-		cfg.StatsOnly = strings.Split(*statsOnly, ",")
-		for i, s := range cfg.StatsOnly {
-			cfg.StatsOnly[i] = strings.TrimSpace(s)
-		}
-	}
-
 	if cfg.Token == "" {
 		cfg.Token = os.Getenv("GITHUB_TOKEN")
 	}
@@ -66,16 +56,4 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
-}
-
-func (c *Config) ShouldShowStat(stat string) bool {
-	if len(c.StatsOnly) == 0 {
-		return true
-	}
-	for _, s := range c.StatsOnly {
-		if s == stat {
-			return true
-		}
-	}
-	return false
 }

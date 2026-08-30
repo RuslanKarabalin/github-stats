@@ -99,7 +99,7 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 	_ = table.Render()
 
 	fmt.Println()
-	_, _ = green.Println("🔥 COMMIT STREAKS")
+	_, _ = green.Println("🔥 CONTRIBUTION STREAKS")
 	fmt.Println(strings.Repeat("-", 80))
 
 	table = tablewriter.NewWriter(os.Stdout)
@@ -122,11 +122,11 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 			stats.MaxStreakEnd.Format("Jan 2, 2006"))
 		_ = table.Append([]string{"Max Streak Period", streakRange})
 	}
-	_ = table.Append([]string{"Total Commit Days", fmt.Sprintf("%d", stats.TotalCommitDays)})
+	_ = table.Append([]string{"Total Active Days", fmt.Sprintf("%d", stats.TotalCommitDays)})
 
 	_ = table.Render()
 
-	if stats.MostActiveDay != "" || stats.MostActiveHour > 0 {
+	if stats.MostActiveDay != "" || stats.MostActiveHour >= 0 {
 		fmt.Println()
 		_, _ = green.Println("📊 ACTIVITY PATTERNS")
 		fmt.Println(strings.Repeat("-", 80))
@@ -348,10 +348,17 @@ func (f *Formatter) displayTable(stats *github.UserStats) error {
 }
 
 func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if maxLen <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
-	return s[:maxLen-3] + "..."
+	if maxLen <= 3 {
+		return string(runes[:maxLen])
+	}
+	return string(runes[:maxLen-3]) + "..."
 }
 
 func formatBytes(bytes int64) string {
