@@ -40,6 +40,10 @@ type UserStats struct {
 	OwnRepoCommits       int
 	OtherRepoCommits     int
 
+	Contributions     []ContributionDay
+	ContributionYears []ContributionYear
+	ReposByYear       []RepoYear
+
 	PRStats     *PullRequestStats
 	IssueStats  *IssueStats
 	ReviewStats *ReviewStats
@@ -98,6 +102,35 @@ type LanguageStat struct {
 	Name       string
 	Bytes      int64
 	Percentage float64
+}
+
+// ContributionDay is a day with at least one contribution on the user's calendar.
+type ContributionDay struct {
+	Date  time.Time
+	Count int
+}
+
+// ContributionYear breaks one calendar year of contributions down by type.
+type ContributionYear struct {
+	Year         int
+	Total        int
+	Commits      int
+	PullRequests int
+	Issues       int
+	Reviews      int
+	Repositories int
+	Private      int
+}
+
+type ContributionCalendar struct {
+	Days  []ContributionDay
+	Years []ContributionYear
+}
+
+type RepoYear struct {
+	Year    int
+	Sources int
+	Forks   int
 }
 
 type RepoCount struct {

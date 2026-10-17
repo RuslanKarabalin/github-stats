@@ -19,6 +19,9 @@ import (
 //go:embed page.html
 var pageTemplate string
 
+//go:embed charts.js
+var chartsScript string
+
 const maxLanguageSlots = 8
 
 type Server struct {
@@ -28,20 +31,25 @@ type Server struct {
 }
 
 type pageData struct {
-	Stats       *github.UserStats
-	Languages   []languageSegment
-	CommitBars  []bar
-	PRBars      []bar
-	ReviewBars  []bar
-	GeneratedAt string
+	Stats        *github.UserStats
+	Languages    []segment
+	PROutcomes   []segment
+	CommitBars   []bar
+	PRBars       []bar
+	ReviewBars   []bar
+	Contrib      *contributionSummary
+	Charts       chartData
+	ChartsScript template.JS
+	GeneratedAt  string
 }
 
-type languageSegment struct {
-	Name  string
-	Pct   float64
-	Bytes string
-	Slot  int
-	Style template.CSS
+// segment is one part of a part-to-whole bar.
+type segment struct {
+	Name   string
+	Pct    float64
+	Detail string
+	Slot   int
+	Style  template.CSS
 }
 
 type bar struct {
@@ -122,14 +130,19 @@ func render(stats *github.UserStats) ([]byte, error) {
 		return nil, fmt.Errorf("failed to parse page template: %w", err)
 	}
 
+	now := time.Now()
 	data := pageData{
-		Stats:       stats,
-		Languages:   languageSegments(stats.Languages),
-		CommitBars:  barsFrom(stats.TopReposByCommits),
-		GeneratedAt: time.Now().Format("2006-01-02 15:04:05 MST"),
+		Stats:        stats,
+		Languages:    languageSegments(stats.Languages),
+		CommitBars:   barsFrom(stats.TopReposByCommits),
+		Contrib:      summarizeContributions(stats.Contributions, now.UTC()),
+		Charts:       buildChartData(stats, now.UTC()),
+		ChartsScript: template.JS(chartsScript),
+		GeneratedAt:  now.Format("2006-01-02 15:04:05 MST"),
 	}
 	if stats.PRStats != nil {
 		data.PRBars = barsFrom(stats.PRStats.TopRepos)
+		data.PROutcomes = prOutcomeSegments(stats.PRStats)
 	}
 	if stats.ReviewStats != nil {
 		data.ReviewBars = barsFrom(stats.ReviewStats.TopRepos)
@@ -143,14 +156,14 @@ func render(stats *github.UserStats) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func languageSegments(languages map[string]int64) []languageSegment {
+func languageSegments(languages map[string]int64) []segment {
 	if len(languages) == 0 {
 		return nil
 	}
 
 	langStats := github.GetLanguageStats(languages)
 
-	var segments []languageSegment
+	var segments []segment
 	var otherPct float64
 	var otherBytes int64
 
@@ -160,22 +173,52 @@ func languageSegments(languages map[string]int64) []languageSegment {
 			otherBytes += lang.Bytes
 			continue
 		}
-		segments = append(segments, languageSegment{
-			Name:  lang.Name,
-			Pct:   lang.Percentage,
-			Bytes: humanBytes(lang.Bytes),
-			Slot:  i + 1,
-			Style: widthStyle("flex-basis", lang.Percentage),
+		segments = append(segments, segment{
+			Name:   lang.Name,
+			Pct:    lang.Percentage,
+			Detail: humanBytes(lang.Bytes),
+			Slot:   i + 1,
+			Style:  widthStyle("flex-basis", lang.Percentage),
 		})
 	}
 
 	if otherBytes > 0 {
-		segments = append(segments, languageSegment{
-			Name:  "Other",
-			Pct:   otherPct,
-			Bytes: humanBytes(otherBytes),
-			Slot:  0,
-			Style: widthStyle("flex-basis", otherPct),
+		segments = append(segments, segment{
+			Name:   "Other",
+			Pct:    otherPct,
+			Detail: humanBytes(otherBytes),
+			Slot:   0,
+			Style:  widthStyle("flex-basis", otherPct),
+		})
+	}
+
+	return segments
+}
+
+func prOutcomeSegments(prs *github.PullRequestStats) []segment {
+	total := prs.Merged + prs.Open + prs.Closed
+	if total == 0 {
+		return nil
+	}
+
+	outcomes := []struct {
+		name  string
+		count int
+	}{
+		{"Merged", prs.Merged},
+		{"Open", prs.Open},
+		{"Closed unmerged", prs.Closed},
+	}
+
+	var segments []segment
+	for i, o := range outcomes {
+		pct := float64(o.count) / float64(total) * 100
+		segments = append(segments, segment{
+			Name:   o.name,
+			Pct:    pct,
+			Detail: humanCount(o.count),
+			Slot:   i + 1,
+			Style:  widthStyle("flex-basis", pct),
 		})
 	}
 

@@ -22,8 +22,13 @@
   --series-4: #eda100;
   --series-5: #e87ba4;
   --series-6: #008300;
-  --series-7: #4a3aa7;
+  --series-7: #6250d6;
   --series-8: #e34948;
+  --heat-0: #ebeae4;
+  --heat-1: #b7d3f6;
+  --heat-2: #6da7ec;
+  --heat-3: #2a78d6;
+  --heat-4: #184f95;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -31,7 +36,7 @@
     color-scheme: dark;
     --plane: #0d0d0d;
     --surface: #1a1a19;
-    --ink: #ffffff;
+    --ink: #f0efec;
     --ink-2: #c3c2b7;
     --muted: #898781;
     --grid: #2c2c2a;
@@ -46,6 +51,11 @@
     --series-6: #008300;
     --series-7: #9085e9;
     --series-8: #e66767;
+    --heat-0: #262624;
+    --heat-1: #104281;
+    --heat-2: #1c5cab;
+    --heat-3: #3987e5;
+    --heat-4: #86b6ef;
   }
 }
 
@@ -275,6 +285,199 @@ body {
 .s7 { background: var(--series-7); }
 .s8 { background: var(--series-8); }
 
+svg .s0 { fill: var(--line); }
+svg .s1 { fill: var(--series-1); }
+svg .s2 { fill: var(--series-2); }
+svg .s3 { fill: var(--series-3); }
+svg .s4 { fill: var(--series-4); }
+
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.card-head h2 { margin: 0; }
+
+.subtitle {
+  margin: -10px 0 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.card-head + .subtitle { margin-top: -8px; }
+
+.chart { width: 100%; min-height: 1px; }
+.chart svg { display: block; overflow: visible; }
+.chart svg:focus { outline: none; }
+.chart svg:focus-visible, .chart rect:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.chart .tick {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart .value-label {
+  fill: var(--ink-2);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .axis { stroke: var(--line); stroke-width: 1; }
+.chart .area { fill: var(--accent); opacity: 0.1; }
+
+.chart .line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart .dot {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.chart .crosshair { stroke: var(--line); stroke-width: 1; }
+
+.chart .column { transition: opacity 0.12s ease; }
+.chart .column.hover { opacity: 0.78; }
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 12px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.chart-legend li { gap: 6px; }
+
+.heatmap-scroll { overflow-x: auto; padding-bottom: 4px; }
+
+.cell.h0 { fill: var(--heat-0); }
+.cell.h1 { fill: var(--heat-1); }
+.cell.h2 { fill: var(--heat-2); }
+.cell.h3 { fill: var(--heat-3); }
+.cell.h4 { fill: var(--heat-4); }
+.cell:hover { stroke: var(--ink-2); stroke-width: 1; }
+
+.heatmap-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.scale {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+}
+
+.scale i {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+}
+
+.scale i:first-of-type { margin-left: 4px; }
+.scale i:last-of-type { margin-right: 4px; }
+.scale .h0 { background: var(--heat-0); }
+.scale .h1 { background: var(--heat-1); }
+.scale .h2 { background: var(--heat-2); }
+.scale .h3 { background: var(--heat-3); }
+.scale .h4 { background: var(--heat-4); }
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.segmented button {
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--ring);
+  border-radius: 999px;
+  padding: 3px 11px;
+  cursor: pointer;
+}
+
+.segmented button:hover { background: var(--ring); }
+
+.segmented button[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
+}
+
+.data-view { margin-top: 14px; }
+
+.data-view summary {
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.data-view summary:hover { color: var(--ink-2); }
+
+.data-scroll {
+  max-height: 280px;
+  overflow: auto;
+  margin-top: 10px;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  min-width: 120px;
+  max-width: 280px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--ring);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+}
+
+.tip-title { color: var(--muted); margin-bottom: 4px; }
+
+.tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.6;
+}
+
+.tip-row strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tip-label { color: var(--ink-2); }
+
+.tip-key {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  flex: none;
+}
+
+.outcome { margin-top: 18px; }
+
 .bars {
   display: grid;
   gap: 12px;
@@ -385,6 +588,26 @@ footer {
     </div>
   </section>
 
+  {{with .Contrib}}
+  <section class="card" data-chart="heatmap">
+    <h2>Contributions</h2>
+    <div class="tiles">
+      <div class="tile"><div class="label">All time</div><div class="value">{{count .Total}}</div></div>
+      <div class="tile"><div class="label">This year</div><div class="value">{{count .ThisYear}}</div></div>
+      <div class="tile"><div class="label">Best day</div><div class="value">{{count .BestCount}}</div><div class="label">{{date .BestDate}}</div></div>
+      <div class="tile"><div class="label">Average per active day</div><div class="value">{{printf "%.1f" .ActiveAvg}}</div></div>
+    </div>
+    <h3>Calendar</h3>
+    <div class="segmented" role="group" aria-label="Calendar period" style="margin-bottom: 14px"></div>
+    <div class="heatmap-scroll"><div class="chart"></div></div>
+    <div class="heatmap-foot">
+      <span class="heatmap-total"></span>
+      <span class="scale" aria-hidden="true">Less<i class="h0"></i><i class="h1"></i><i class="h2"></i><i class="h3"></i><i class="h4"></i>More</span>
+    </div>
+    <div class="table-slot"></div>
+  </section>
+  {{end}}
+
   <section class="card">
     <h2>Contribution streaks</h2>
     <div class="streak">
@@ -412,11 +635,43 @@ footer {
     </div>
   </section>
 
+  {{if .Charts.Monthly}}
+  <section class="card" data-chart="monthly">
+    <h2>Contributions over time</h2>
+    <p class="subtitle">Total contributions per month, from the first active month</p>
+    <div class="chart"></div>
+    <div class="table-slot"></div>
+  </section>
+  {{end}}
+
+  {{if or .Charts.Years .Charts.Weekdays}}
+  <div class="columns">
+    {{if .Charts.Years}}
+    <section class="card" data-chart="mix">
+      <h2>Contribution mix by year</h2>
+      <p class="subtitle">Other covers new repositories and private contributions</p>
+      <div class="legend-slot"></div>
+      <div class="chart"></div>
+      <div class="table-slot"></div>
+    </section>
+    {{end}}
+
+    {{if .Charts.Weekdays}}
+    <section class="card" data-chart="weekday">
+      <h2>Activity by weekday</h2>
+      <p class="subtitle">Average contributions per day, idle days included</p>
+      <div class="chart"></div>
+      <div class="table-slot"></div>
+    </section>
+    {{end}}
+  </div>
+  {{end}}
+
   {{if .Languages}}
   <section class="card">
     <h2>Languages</h2>
     <div class="langbar">
-      {{range .Languages}}<span class="s{{.Slot}}" style="{{.Style}}" title="{{.Name}} · {{printf "%.1f" .Pct}}% · {{.Bytes}}"></span>{{end}}
+      {{range .Languages}}<span class="s{{.Slot}}" style="{{.Style}}" data-tip="{{.Name}}" data-tip-value="{{printf "%.1f" .Pct}}%" data-tip-label="{{.Detail}}"></span>{{end}}
     </div>
     <ul class="legend">
       {{range .Languages}}
@@ -424,7 +679,7 @@ footer {
         <span class="swatch s{{.Slot}}"></span>
         <span class="name">{{.Name}}</span>
         <span class="pct">{{printf "%.1f" .Pct}}%</span>
-        <span class="size">{{.Bytes}}</span>
+        <span class="size">{{.Detail}}</span>
       </li>
       {{end}}
     </ul>
@@ -456,7 +711,7 @@ footer {
       <h2>Top repositories by commits</h2>
       <div class="bars">
         {{range .CommitBars}}
-        <div class="bar-row" title="{{.Label}} · {{.Value}} commits">
+        <div class="bar-row" data-tip="{{.Label}}" data-tip-value="{{.Value}}" data-tip-label="commits">
           <div class="name">{{.Label}}</div>
           <div><div class="fill" style="{{.Style}}"></div></div>
           <div class="value">{{.Value}}</div>
@@ -466,6 +721,16 @@ footer {
     </section>
     {{end}}
   </div>
+
+  {{if .Charts.Repos}}
+  <section class="card" data-chart="repos">
+    <h2>Repositories created per year</h2>
+    <p class="subtitle">Public repositories owned by the user</p>
+    <div class="legend-slot"></div>
+    <div class="chart"></div>
+    <div class="table-slot"></div>
+  </section>
+  {{end}}
 
   {{with .Stats.PRStats}}
   {{if gt .Total 0}}
@@ -481,11 +746,29 @@ footer {
       {{end}}
     </div>
 
+    {{if $.PROutcomes}}
+    <div class="outcome">
+      <div class="langbar">
+        {{range $.PROutcomes}}{{if gt .Pct 0.0}}<span class="s{{.Slot}}" style="{{.Style}}" data-tip="{{.Name}}" data-tip-value="{{.Detail}}" data-tip-label="{{printf "%.1f" .Pct}}%"></span>{{end}}{{end}}
+      </div>
+      <ul class="legend">
+        {{range $.PROutcomes}}
+        <li>
+          <span class="swatch s{{.Slot}}"></span>
+          <span class="name">{{.Name}}</span>
+          <span class="pct">{{printf "%.1f" .Pct}}%</span>
+          <span class="size">{{.Detail}}</span>
+        </li>
+        {{end}}
+      </ul>
+    </div>
+    {{end}}
+
     {{if $.PRBars}}
     <h3>Top repositories by pull requests</h3>
     <div class="bars">
       {{range $.PRBars}}
-      <div class="bar-row" title="{{.Label}} · {{.Value}} pull requests">
+      <div class="bar-row" data-tip="{{.Label}}" data-tip-value="{{.Value}}" data-tip-label="pull requests">
         <div class="name">{{.Label}}</div>
         <div><div class="fill" style="{{.Style}}"></div></div>
         <div class="value">{{.Value}}</div>
@@ -541,7 +824,7 @@ footer {
       <h3>Top repositories by reviews</h3>
       <div class="bars">
         {{range $.ReviewBars}}
-        <div class="bar-row" title="{{.Label}} · {{.Value}} reviews">
+        <div class="bar-row" data-tip="{{.Label}}" data-tip-value="{{.Value}}" data-tip-label="reviews">
           <div class="name">{{.Label}}</div>
           <div><div class="fill" style="{{.Style}}"></div></div>
           <div class="value">{{.Value}}</div>
@@ -557,5 +840,7 @@ footer {
   <footer>Generated at {{.GeneratedAt}}</footer>
 
 </main>
+<script type="application/json" id="chart-data">{{.Charts}}</script>
+<script>{{.ChartsScript}}</script>
 </body>
 </html>

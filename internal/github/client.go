@@ -34,7 +34,13 @@ type contributionCalendarResponse struct {
 	Data struct {
 		User struct {
 			ContributionsCollection struct {
-				ContributionCalendar struct {
+				TotalCommitContributions            int `json:"totalCommitContributions"`
+				TotalIssueContributions             int `json:"totalIssueContributions"`
+				TotalPullRequestContributions       int `json:"totalPullRequestContributions"`
+				TotalPullRequestReviewContributions int `json:"totalPullRequestReviewContributions"`
+				TotalRepositoryContributions        int `json:"totalRepositoryContributions"`
+				RestrictedContributionsCount        int `json:"restrictedContributionsCount"`
+				ContributionCalendar                struct {
 					TotalContributions int `json:"totalContributions"`
 					Weeks              []struct {
 						ContributionDays []struct {
@@ -159,12 +165,9 @@ func (c *Client) GetLanguages(repos []*github.Repository) (map[string]int64, err
 	return languages, firstErr
 }
 
+// GetCommitActivity collects commit dates from the REST API. It is the fallback
+// for when the contribution calendar is unavailable.
 func (c *Client) GetCommitActivity(username string, fullScan bool) ([]time.Time, error) {
-	dates, err := c.GetContributionCalendar(username)
-	if err == nil && len(dates) > 0 {
-		return dates, nil
-	}
-
 	if fullScan {
 		return c.getCommitActivityFull(username)
 	}
@@ -335,47 +338,80 @@ func (c *Client) countRepoCommits(author, owner, repo string) int {
 	return len(commits)
 }
 
-func (c *Client) GetContributionCalendar(username string) ([]time.Time, error) {
+// GetContributionCalendar fetches the contribution calendar one calendar year at
+// a time, from the year of since up to the current year. If an older year
+// fails, the years after it are still returned.
+func (c *Client) GetContributionCalendar(username string, since time.Time) (*ContributionCalendar, error) {
 	now := time.Now().UTC()
-	var allDates []time.Time
-	dateSet := make(map[string]bool)
-
-	for yearsBack := 0; yearsBack < 5; yearsBack++ {
-		to := now.AddDate(-yearsBack, 0, 0)
-		from := to.AddDate(-1, 0, 0)
-
-		if from.After(now) {
-			continue
-		}
-		if to.After(now) {
-			to = now
-		}
-
-		dates, err := c.getContributionsForPeriod(username, from, to)
-		if err != nil {
-			if yearsBack > 0 {
-				break
-			}
-			return nil, err
-		}
-
-		for _, date := range dates {
-			dateStr := date.Format("2006-01-02")
-			if !dateSet[dateStr] {
-				dateSet[dateStr] = true
-				allDates = append(allDates, date)
-			}
-		}
+	firstYear := since.UTC().Year()
+	if since.IsZero() || firstYear > now.Year() {
+		firstYear = now.Year()
 	}
 
-	return allDates, nil
+	type yearResult struct {
+		days []ContributionDay
+		year ContributionYear
+		err  error
+	}
+	results := make([]yearResult, now.Year()-firstYear+1)
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, c.maxWorkers)
+
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			year := now.Year() - i
+			from := time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC)
+			to := time.Date(year, time.December, 31, 23, 59, 59, 0, time.UTC)
+			if to.After(now) {
+				to = now
+			}
+
+			days, summary, err := c.getContributionsForPeriod(username, from, to)
+			summary.Year = year
+			results[i] = yearResult{days: days, year: summary, err: err}
+		}(i)
+	}
+
+	wg.Wait()
+
+	if results[0].err != nil {
+		return nil, results[0].err
+	}
+
+	calendar := &ContributionCalendar{}
+	for _, r := range results {
+		if r.err != nil {
+			break
+		}
+		calendar.Years = append(calendar.Years, r.year)
+		calendar.Days = append(r.days, calendar.Days...)
+	}
+
+	// Years were collected newest first.
+	for i, j := 0, len(calendar.Years)-1; i < j; i, j = i+1, j-1 {
+		calendar.Years[i], calendar.Years[j] = calendar.Years[j], calendar.Years[i]
+	}
+
+	return calendar, nil
 }
 
-func (c *Client) getContributionsForPeriod(username string, from, to time.Time) ([]time.Time, error) {
+func (c *Client) getContributionsForPeriod(username string, from, to time.Time) ([]ContributionDay, ContributionYear, error) {
 	query := `
 		query($username: String!, $from: DateTime!, $to: DateTime!) {
 			user(login: $username) {
 				contributionsCollection(from: $from, to: $to) {
+					totalCommitContributions
+					totalIssueContributions
+					totalPullRequestContributions
+					totalPullRequestReviewContributions
+					totalRepositoryContributions
+					restrictedContributionsCount
 					contributionCalendar {
 						totalContributions
 						weeks {
@@ -396,57 +432,77 @@ func (c *Client) getContributionsForPeriod(username string, from, to time.Time) 
 		"to":       to.Format(time.RFC3339),
 	}
 
-	reqBody := graphQLRequest{
-		Query:     query,
-		Variables: variables,
-	}
-
-	jsonBody, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(c.ctx, "POST", graphQLEndpoint, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
 	var result contributionCalendarResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if err := c.graphQL(query, variables, &result); err != nil {
+		return nil, ContributionYear{}, err
 	}
 
 	if len(result.Errors) > 0 {
-		return nil, fmt.Errorf("GraphQL error: %s", result.Errors[0].Message)
+		return nil, ContributionYear{}, fmt.Errorf("GraphQL error: %s", result.Errors[0].Message)
 	}
 
-	var dates []time.Time
-	for _, week := range result.Data.User.ContributionsCollection.ContributionCalendar.Weeks {
+	collection := result.Data.User.ContributionsCollection
+	summary := ContributionYear{
+		Total:        collection.ContributionCalendar.TotalContributions,
+		Commits:      collection.TotalCommitContributions,
+		PullRequests: collection.TotalPullRequestContributions,
+		Issues:       collection.TotalIssueContributions,
+		Reviews:      collection.TotalPullRequestReviewContributions,
+		Repositories: collection.TotalRepositoryContributions,
+		Private:      collection.RestrictedContributionsCount,
+	}
+
+	var days []ContributionDay
+	for _, week := range collection.ContributionCalendar.Weeks {
 		for _, day := range week.ContributionDays {
 			if day.ContributionCount > 0 {
 				date, err := time.Parse("2006-01-02", day.Date)
 				if err != nil {
 					continue
 				}
-				dates = append(dates, date)
+				days = append(days, ContributionDay{Date: date, Count: day.ContributionCount})
 			}
 		}
 	}
 
-	return dates, nil
+	return days, summary, nil
+}
+
+// graphQL posts a query and decodes the response body into out. GraphQL-level
+// errors are left in out for the caller to check.
+func (c *Client) graphQL(query string, variables map[string]interface{}, out interface{}) error {
+	jsonBody, err := json.Marshal(graphQLRequest{Query: query, Variables: variables})
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(c.ctx, "POST", graphQLEndpoint, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GraphQL request failed: %s", resp.Status)
+	}
+
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) CheckRateLimit() (*github.RateLimits, error) {
@@ -672,37 +728,9 @@ func (c *Client) GetUserReviews(username string) (*ReviewStats, error) {
 			variables["after"] = *cursor
 		}
 
-		reqBody := graphQLRequest{
-			Query:     query,
-			Variables: variables,
-		}
-
-		jsonBody, err := json.Marshal(reqBody)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal request: %w", err)
-		}
-
-		req, err := http.NewRequestWithContext(c.ctx, "POST", graphQLEndpoint, bytes.NewBuffer(jsonBody))
-		if err != nil {
-			return nil, fmt.Errorf("failed to create request: %w", err)
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to execute request: %w", err)
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response: %w", err)
-		}
-
 		var result reviewContributionsResponse
-		if err := json.Unmarshal(body, &result); err != nil {
-			return nil, fmt.Errorf("failed to parse response: %w", err)
+		if err := c.graphQL(query, variables, &result); err != nil {
+			return nil, err
 		}
 
 		if len(result.Errors) > 0 {

@@ -60,9 +60,25 @@ func (s *StatsCalculator) Calculate(ctx context.Context, username string, fullSc
 	}
 	stats.Languages = languages
 
-	commitDates, err := s.client.GetCommitActivity(username, fullScan)
+	s.calculateReposByYear(stats, repos)
+
+	var commitDates []time.Time
+	calendar, err := s.client.GetContributionCalendar(username, stats.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get commit activity: %w", err)
+		s.addWarning("contribution calendar unavailable, falling back to commit history: %v", err)
+	} else {
+		stats.Contributions = calendar.Days
+		stats.ContributionYears = calendar.Years
+		for _, day := range calendar.Days {
+			commitDates = append(commitDates, day.Date)
+		}
+	}
+
+	if len(commitDates) == 0 {
+		commitDates, err = s.client.GetCommitActivity(username, fullScan)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get commit activity: %w", err)
+		}
 	}
 
 	streakInfo := s.calculateStreaks(commitDates)
@@ -341,6 +357,44 @@ func (s *StatsCalculator) calculateTopRepositories(stats *UserStats, repos []*gi
 		stats.TopRepositories = repoList[:5]
 	} else {
 		stats.TopRepositories = repoList
+	}
+}
+
+func (s *StatsCalculator) calculateReposByYear(stats *UserStats, repos []*github.Repository) {
+	byYear := make(map[int]*RepoYear)
+	for _, repo := range repos {
+		if repo.CreatedAt == nil {
+			continue
+		}
+		year := repo.CreatedAt.Year()
+		entry, ok := byYear[year]
+		if !ok {
+			entry = &RepoYear{Year: year}
+			byYear[year] = entry
+		}
+		if repo.Fork != nil && *repo.Fork {
+			entry.Forks++
+		} else {
+			entry.Sources++
+		}
+	}
+
+	if len(byYear) == 0 {
+		return
+	}
+
+	// Fill empty years so the chart has an honest time axis.
+	first, last := time.Now().Year(), 0
+	for year := range byYear {
+		first = min(first, year)
+		last = max(last, year)
+	}
+	for year := first; year <= last; year++ {
+		if entry, ok := byYear[year]; ok {
+			stats.ReposByYear = append(stats.ReposByYear, *entry)
+		} else {
+			stats.ReposByYear = append(stats.ReposByYear, RepoYear{Year: year})
+		}
 	}
 }
 
