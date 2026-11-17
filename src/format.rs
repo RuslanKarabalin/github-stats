@@ -29,13 +29,24 @@ pub fn hour(h: u32) -> String {
     }
 }
 
+/// Formats a count with a unit that takes a plain `s` in the plural,
+/// e.g. `1 day` or `3 days`.
+pub fn units(n: i64, unit: &str) -> String {
+    if n == 1 {
+        format!("1 {unit}")
+    } else {
+        format!("{n} {unit}s")
+    }
+}
+
 /// Formats a duration as days, or hours or minutes when shorter than a day.
-pub fn duration(d: TimeDelta, minutes_word: &str) -> String {
+/// `short` writes minutes as `min`.
+pub fn duration(d: TimeDelta, short: bool) -> String {
     match d.num_days() {
-        0 if d.num_hours() == 0 => format!("{} {minutes_word}", d.num_minutes()),
-        0 => format!("{} hours", d.num_hours()),
-        1 => "1 day".to_string(),
-        days => format!("{days} days"),
+        0 if d.num_hours() == 0 && short => format!("{} min", d.num_minutes()),
+        0 if d.num_hours() == 0 => units(d.num_minutes(), "minute"),
+        0 => units(d.num_hours(), "hour"),
+        days => units(days, "day"),
     }
 }
 
@@ -90,10 +101,13 @@ mod tests {
 
     #[test]
     fn formats_durations() {
-        assert_eq!(duration(TimeDelta::minutes(42), "min"), "42 min");
-        assert_eq!(duration(TimeDelta::hours(5), "minutes"), "5 hours");
-        assert_eq!(duration(TimeDelta::hours(30), "minutes"), "1 day");
-        assert_eq!(duration(TimeDelta::days(12), "minutes"), "12 days");
+        assert_eq!(duration(TimeDelta::minutes(42), true), "42 min");
+        assert_eq!(duration(TimeDelta::minutes(1), false), "1 minute");
+        assert_eq!(duration(TimeDelta::minutes(42), false), "42 minutes");
+        assert_eq!(duration(TimeDelta::hours(1), false), "1 hour");
+        assert_eq!(duration(TimeDelta::hours(5), false), "5 hours");
+        assert_eq!(duration(TimeDelta::hours(30), false), "1 day");
+        assert_eq!(duration(TimeDelta::days(12), true), "12 days");
     }
 
     #[test]

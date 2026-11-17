@@ -613,7 +613,7 @@ footer {
     <div class="streak">
       <div class="hero">
         <div class="label">Longest streak</div>
-        <div><span class="value">{{ streak.max }}</span><span class="unit">days</span></div>
+        <div><span class="value">{{ streak.max }}</span><span class="unit">{{ streak.max_unit }}</span></div>
         {% if streak.max_period %}
           <div class="period">{{ streak.max_period }}</div>
         {% endif %}
@@ -629,7 +629,7 @@ footer {
           <div class="tile"><div class="label">Most active day</div><div class="value">{{ streak.most_active_day }}</div></div>
         {% endif %}
         {% if streak.most_active_hour %}
-          <div class="tile"><div class="label">Most active hour</div><div class="value">{{ streak.most_active_hour }}</div></div>
+          <div class="tile"><div class="label">Most active hour (UTC)</div><div class="value">{{ streak.most_active_hour }}</div></div>
         {% endif %}
       </div>
     </div>
@@ -725,7 +725,7 @@ footer {
   {% if charts.repos %}
   <section class="card" data-chart="repos">
     <h2>Repositories created per year</h2>
-    <p class="subtitle">Public repositories owned by the user</p>
+    <p class="subtitle">{% if includes_private_repos %}Public and private repositories{% else %}Public repositories{% endif %} owned by the user</p>
     <div class="legend-slot"></div>
     <div class="chart"></div>
     <div class="table-slot"></div>
@@ -813,7 +813,7 @@ footer {
     <section class="card">
       <h2>Code reviews</h2>
       <div class="tiles">
-        <div class="tile"><div class="label">Reviews submitted</div><div class="value">{{ reviews.total }}</div></div>
+        <div class="tile"><div class="label">Reviews submitted (all time)</div><div class="value">{{ reviews.total }}</div></div>
       </div>
       {% if reviews.bars %}
       <h3>Top repositories by reviews</h3>

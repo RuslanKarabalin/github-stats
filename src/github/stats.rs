@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Datelike, Days, NaiveDate, Timelike, Utc, Weekday};
 
-use super::client::{ApiRepo, ApiUser, Client};
-use super::types::{AccountAge, RepoYear, Repository, UserStats};
+use super::client::{ApiRepo, ApiUser, Client, top_repos};
+use super::types::{AccountAge, RepoYear, Repository, ReviewStats, UserStats};
 
 /// Gathers a user's statistics. Problems that only make the result less
 /// complete are reported as warnings instead of errors.
@@ -35,9 +35,23 @@ impl<'a> StatsCalculator<'a> {
         &self.warnings
     }
 
-    pub async fn calculate(&mut self, username: &str, full_scan: bool) -> Result<UserStats> {
+    fn warn(&mut self, warning: Option<String>) {
+        self.warnings.extend(warning);
+    }
+
+    /// Gathers the statistics of `username`. `full_scan` reads the whole
+    /// commit history for activity hours instead of recent events;
+    /// `include_private` counts private repositories, which only works when
+    /// `username` is the authenticated user.
+    pub async fn calculate(
+        &mut self,
+        username: &str,
+        full_scan: bool,
+        include_private: bool,
+    ) -> Result<UserStats> {
         let mut stats = UserStats {
             username: username.to_string(),
+            includes_private_repos: include_private,
             ..UserStats::default()
         };
 
@@ -46,7 +60,7 @@ impl<'a> StatsCalculator<'a> {
 
         let repos = self
             .client
-            .repositories(username)
+            .repositories(username, include_private)
             .await
             .context("failed to get repositories")?;
 
@@ -55,79 +69,103 @@ impl<'a> StatsCalculator<'a> {
             stats.total_forks += repo.forks_count;
         }
 
-        let (languages, err) = self.client.languages(&repos).await;
-        if let Some(err) = err {
-            self.warnings
-                .push(format!("failed to get complete language stats: {err:#}"));
-        }
+        let (languages, failures) = self.client.languages(&repos).await;
+        self.warn(failures.warning("failed to get complete language stats"));
         stats.languages = languages;
         stats.repos_by_year = repos_by_year(&repos);
 
-        let mut commit_dates: Vec<DateTime<Utc>> = Vec::new();
-        match self
+        let calendar = match self
             .client
             .contribution_calendar(username, stats.created_at)
             .await
         {
-            Ok(calendar) => {
-                commit_dates = calendar
-                    .days
-                    .iter()
-                    .map(|d| d.date.and_time(Default::default()).and_utc())
-                    .collect();
-                stats.contributions = calendar.days;
-                stats.contribution_years = calendar.years;
+            Ok(mut calendar) => {
+                self.warnings.append(&mut calendar.warnings);
+                Some(calendar)
             }
-            Err(err) => self.warnings.push(format!(
-                "contribution calendar unavailable, falling back to commit history: {err:#}"
-            )),
-        }
+            Err(err) => {
+                self.warnings.push(format!(
+                    "contribution calendar unavailable, so review stats are skipped and \
+                     streaks fall back to commit history: {err:#}"
+                ));
+                None
+            }
+        };
+        let has_calendar_days = calendar.as_ref().is_some_and(|c| !c.days.is_empty());
 
-        if commit_dates.is_empty() {
-            commit_dates = self
-                .client
-                .commit_activity(username, full_scan)
-                .await
-                .context("failed to get commit activity")?;
-        }
+        // Exact timestamps give the busiest hour, which the calendar lacks.
+        // Without calendar days they also drive streaks, so then they are required.
+        let commit_times = match self
+            .client
+            .commit_activity(username, &repos, full_scan)
+            .await
+        {
+            Ok((times, failures)) => {
+                self.warn(failures.warning("commit history scan is incomplete"));
+                times
+            }
+            Err(err) if has_calendar_days => {
+                self.warnings.push(format!(
+                    "failed to get recent activity, most active hour is unknown: {err:#}"
+                ));
+                Vec::new()
+            }
+            Err(err) => return Err(err.context("failed to get commit activity")),
+        };
 
-        let days: Vec<NaiveDate> = commit_dates.iter().map(DateTime::date_naive).collect();
-        let streaks = calculate_streaks(&days, Utc::now().date_naive());
+        let active_days: Vec<(NaiveDate, u32)> = match &calendar {
+            Some(c) if has_calendar_days => c.days.iter().map(|d| (d.date, d.count)).collect(),
+            _ => commit_times.iter().map(|t| (t.date_naive(), 1)).collect(),
+        };
+
+        let dates: Vec<NaiveDate> = active_days.iter().map(|&(date, _)| date).collect();
+        let streaks = calculate_streaks(&dates, Utc::now().date_naive());
         stats.current_streak = streaks.current;
         stats.max_streak = streaks.max;
         stats.current_streak_start = streaks.current_start;
         stats.max_streak_start = streaks.max_start;
         stats.max_streak_end = streaks.max_end;
-        stats.total_commit_days = streaks.active_days;
+        stats.total_active_days = streaks.active_days;
 
-        (stats.most_active_day, stats.most_active_hour) = activity_patterns(&commit_dates);
+        stats.most_active_day =
+            most_active_weekday(&active_days).map(|d| weekday_name(d).to_string());
+        stats.most_active_hour = most_active_hour(&commit_times);
         stats.top_repositories = top_repositories(&repos, 5);
 
-        let (top_by_commits, prs, issues, reviews) = tokio::join!(
+        if let Some(calendar) = calendar {
+            stats.review_stats = Some(ReviewStats {
+                total: calendar.years.iter().map(|y| u64::from(y.reviews)).sum(),
+                top_repos: top_repos(calendar.reviews_by_repo, 5),
+            });
+            stats.contributions = calendar.days;
+            stats.contribution_years = calendar.years;
+        }
+
+        let ((top_by_commits, commit_failures), prs, issues) = tokio::join!(
             self.client.top_repos_by_commits(username, &repos, 5),
             self.client.pull_requests(username),
             self.client.issues(username),
-            self.client.reviews(username),
         );
 
         stats.top_repos_by_commits = top_by_commits;
+        self.warn(commit_failures.warning("failed to count commits in some repositories"));
         match prs {
-            Ok(prs) => stats.pr_stats = Some(prs),
+            Ok((prs, warnings)) => {
+                stats.pr_stats = Some(prs);
+                self.warnings.extend(warnings);
+            }
             Err(err) => self
                 .warnings
                 .push(format!("failed to get PR stats: {err:#}")),
         }
         match issues {
-            Ok(issues) => stats.issue_stats = Some(issues),
+            Ok((issues, warnings)) => {
+                stats.issue_stats = Some(issues);
+                self.warnings.extend(warnings);
+            }
             Err(err) => self
                 .warnings
                 .push(format!("failed to get issue stats: {err:#}")),
-        }
-        match reviews {
-            Ok(reviews) => stats.review_stats = Some(reviews),
-            Err(err) => self
-                .warnings
-                .push(format!("failed to get review stats: {err:#}")),
         }
 
         Ok(stats)
@@ -204,21 +242,12 @@ pub fn calculate_streaks(dates: &[NaiveDate], today: NaiveDate) -> StreakInfo {
     }
 }
 
-/// Returns the weekday with the most activity and, when the timestamps carry
-/// a time of day, the busiest hour. Ties go to the earlier day or hour.
-pub fn activity_patterns(dates: &[DateTime<Utc>]) -> (Option<String>, Option<u32>) {
-    if dates.is_empty() {
-        return (None, None);
-    }
-
-    let mut by_day = [0u32; 7];
-    let mut by_hour = [0u32; 24];
-    let mut has_time_of_day = false;
-
-    for date in dates {
-        by_day[date.weekday().num_days_from_sunday() as usize] += 1;
-        by_hour[date.hour() as usize] += 1;
-        has_time_of_day |= date.num_seconds_from_midnight() != 0;
+/// The weekday with the most contributions, weighting each date by its
+/// count. Ties go to the earlier day, with weeks starting on Sunday.
+pub fn most_active_weekday(days: &[(NaiveDate, u32)]) -> Option<Weekday> {
+    let mut by_day = [0u64; 7];
+    for &(date, count) in days {
+        by_day[date.weekday().num_days_from_sunday() as usize] += u64::from(count);
     }
 
     const SUNDAY_FIRST: [Weekday; 7] = [
@@ -230,18 +259,20 @@ pub fn activity_patterns(dates: &[DateTime<Utc>]) -> (Option<String>, Option<u32
         Weekday::Fri,
         Weekday::Sat,
     ];
-    let day = weekday_name(SUNDAY_FIRST[busiest(&by_day).unwrap_or(0)]);
-    let hour = if has_time_of_day {
-        busiest(&by_hour).map(|h| h as u32)
-    } else {
-        None
-    };
+    busiest(&by_day).map(|i| SUNDAY_FIRST[i])
+}
 
-    (Some(day.to_string()), hour)
+/// The hour of day (UTC) with the most activity. Ties go to the earlier hour.
+pub fn most_active_hour(times: &[DateTime<Utc>]) -> Option<u32> {
+    let mut by_hour = [0u64; 24];
+    for time in times {
+        by_hour[time.hour() as usize] += 1;
+    }
+    busiest(&by_hour).map(|h| h as u32)
 }
 
 /// Index of the largest non-zero count, preferring the first on ties.
-fn busiest(counts: &[u32]) -> Option<usize> {
+fn busiest(counts: &[u64]) -> Option<usize> {
     let mut best: Option<usize> = None;
     for (i, &count) in counts.iter().enumerate() {
         if count > best.map_or(0, |b| counts[b]) {
@@ -398,30 +429,29 @@ mod tests {
     }
 
     #[test]
-    fn activity_patterns_without_time_of_day() {
-        // 2026-01-05 and 2026-01-12 are Mondays.
-        let dates: Vec<_> = ["2026-01-05", "2026-01-12", "2026-01-07"]
-            .iter()
-            .map(|s| d(s).and_time(Default::default()).and_utc())
-            .collect();
-        assert_eq!(
-            activity_patterns(&dates),
-            (Some("Monday".to_string()), None)
-        );
+    fn most_active_weekday_weighs_counts() {
+        // 2026-01-05 and 2026-01-12 are Mondays, 2026-01-07 is a Wednesday.
+        let days = [
+            (d("2026-01-05"), 1),
+            (d("2026-01-12"), 1),
+            (d("2026-01-07"), 5),
+        ];
+        assert_eq!(most_active_weekday(&days), Some(Weekday::Wed));
+        // Each weekday occurs once, so the tie goes to Sunday.
+        let days = [(d("2026-01-04"), 2), (d("2026-01-05"), 2)];
+        assert_eq!(most_active_weekday(&days), Some(Weekday::Sun));
+        assert_eq!(most_active_weekday(&[]), None);
     }
 
     #[test]
-    fn activity_patterns_with_hours() {
-        let dates = [
+    fn most_active_hour_counts_timestamps() {
+        let times = [
             Utc.with_ymd_and_hms(2026, 1, 4, 14, 30, 0).unwrap(),
             Utc.with_ymd_and_hms(2026, 1, 5, 14, 0, 0).unwrap(),
             Utc.with_ymd_and_hms(2026, 1, 6, 9, 0, 0).unwrap(),
         ];
-        // Each weekday occurs once, so the tie goes to Sunday.
-        assert_eq!(
-            activity_patterns(&dates),
-            (Some("Sunday".to_string()), Some(14))
-        );
+        assert_eq!(most_active_hour(&times), Some(14));
+        assert_eq!(most_active_hour(&[]), None);
     }
 
     #[test]

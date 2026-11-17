@@ -15,16 +15,18 @@ pub enum Format {
     after_help = "\
 Examples:
   github-stats --user octocat
-  github-stats --user octocat --full --format json
+  github-stats --user octocat --full --format json > stats.json
   github-stats --user octocat --web --port 3000
-  github-stats --token ghp_xxx --user octocat
+  github-stats --private --web
 
 Authentication:
-  Set GITHUB_TOKEN environment variable or use --token flag
-  Create token at: https://github.com/settings/tokens"
+  Set GITHUB_TOKEN in the environment or in a .env file in the current
+  directory. --token also works, but a token on the command line is visible
+  to other processes and stays in the shell history.
+  Create a token at: https://github.com/settings/tokens"
 )]
 pub struct Config {
-    /// GitHub Personal Access Token (overrides GITHUB_TOKEN env)
+    /// GitHub Personal Access Token (overrides GITHUB_TOKEN; prefer the variable)
     #[arg(long, default_value = "", hide_default_value = true)]
     pub token: String,
 
@@ -32,9 +34,15 @@ pub struct Config {
     #[arg(long = "user")]
     pub username: Option<String>,
 
-    /// Perform full history scan (slower but complete)
+    /// Scan the commit history of every repository to find the most active
+    /// hour (slow). Without it, recent push events are used
     #[arg(long = "full")]
     pub full_scan: bool,
+
+    /// Include your private repositories (only when analyzing the
+    /// authenticated user)
+    #[arg(long = "private")]
+    pub include_private: bool,
 
     /// Output format
     #[arg(long, value_enum, default_value_t = Format::Table)]
@@ -55,7 +63,14 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self> {
-        Self::from_parsed(Self::parse(), std::env::var("GITHUB_TOKEN").ok())
+        let cfg = Self::parse();
+        // Variables already set in the environment win over the .env file.
+        match dotenvy::dotenv() {
+            Ok(_) => {}
+            Err(err) if err.not_found() => {}
+            Err(err) => bail!("failed to read .env file: {err}"),
+        }
+        Self::from_parsed(cfg, std::env::var("GITHUB_TOKEN").ok())
     }
 
     fn from_parsed(mut cfg: Self, env_token: Option<String>) -> Result<Self> {
@@ -92,6 +107,13 @@ mod tests {
         assert_eq!(cfg.username.as_deref(), Some("octocat"));
         assert_eq!(cfg.format, Format::Table);
         assert_eq!(cfg.port, 8080);
+        assert!(!cfg.full_scan && !cfg.include_private);
+    }
+
+    #[test]
+    fn parses_scan_flags() {
+        let cfg = parse(&["--full", "--private"], Some("t")).unwrap();
+        assert!(cfg.full_scan && cfg.include_private);
     }
 
     #[test]

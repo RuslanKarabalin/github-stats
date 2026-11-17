@@ -1,6 +1,9 @@
 BINARY_NAME=github-stats
 BUILD_DIR=./target/release
 CARGO=cargo
+# GitHub username to analyze; empty means the token's own account.
+GH_USER ?=
+USER_FLAG=$(if $(GH_USER),--user $(GH_USER))
 
 .PHONY: all build clean test deps install uninstall run user full web fmt lint help
 
@@ -40,16 +43,17 @@ run: build
 	$(BUILD_DIR)/$(BINARY_NAME)
 
 user: build
-	@echo "Running $(BINARY_NAME) with user flag..."
-	$(BUILD_DIR)/$(BINARY_NAME) --user $(USER)
+	@test -n "$(GH_USER)" || { echo "Usage: make user GH_USER=octocat"; exit 1; }
+	@echo "Running $(BINARY_NAME) for $(GH_USER)..."
+	$(BUILD_DIR)/$(BINARY_NAME) $(USER_FLAG)
 
 full: build
 	@echo "Running $(BINARY_NAME) with full scan..."
-	$(BUILD_DIR)/$(BINARY_NAME) --user $(USER) --full
+	$(BUILD_DIR)/$(BINARY_NAME) $(USER_FLAG) --full
 
 web: build
 	@echo "Running $(BINARY_NAME) with web output..."
-	$(BUILD_DIR)/$(BINARY_NAME) --user $(USER) --web
+	$(BUILD_DIR)/$(BINARY_NAME) $(USER_FLAG) --web
 
 fmt:
 	@echo "Formatting code..."
@@ -70,9 +74,9 @@ help:
 	@echo "  install    - Install binary to /usr/local/bin"
 	@echo "  uninstall  - Remove binary from /usr/local/bin"
 	@echo "  run        - Build and run the application"
-	@echo "  user       - Run for a user (make user USER=octocat)"
-	@echo "  full       - Run with full scan (make full USER=octocat)"
-	@echo "  web        - Serve statistics on localhost (make web USER=octocat)"
+	@echo "  user       - Run for a user (make user GH_USER=octocat)"
+	@echo "  full       - Run with full scan (GH_USER is optional)"
+	@echo "  web        - Serve statistics on localhost (GH_USER is optional)"
 	@echo "  fmt        - Format code"
 	@echo "  lint       - Run clippy"
 	@echo "  help       - Show this help message"

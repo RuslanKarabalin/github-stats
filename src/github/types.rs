@@ -1,8 +1,10 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 
 use chrono::{DateTime, NaiveDate, TimeDelta, Utc};
 use serde::Serialize;
+
+use crate::format::units;
 
 /// Everything the tool knows about a user. Field names in JSON output match
 /// the original Go version of the tool.
@@ -24,6 +26,8 @@ pub struct UserStats {
     pub public_gists: u64,
     pub followers: u64,
     pub following: u64,
+    /// Whether private repositories are included in the repository numbers.
+    pub includes_private_repos: bool,
 
     pub account_age: AccountAge,
     pub total_stars: u64,
@@ -36,9 +40,12 @@ pub struct UserStats {
     pub max_streak_start: Option<NaiveDate>,
     #[serde(with = "serde_date::opt")]
     pub max_streak_end: Option<NaiveDate>,
-    pub total_commit_days: u32,
+    /// Days with at least one contribution of any kind.
+    #[serde(rename = "TotalCommitDays")]
+    pub total_active_days: u32,
 
     pub languages: BTreeMap<String, u64>,
+    /// Weekday with the most contributions.
     pub most_active_day: Option<String>,
     /// Hour of day (UTC). Serialized as -1 when unknown.
     #[serde(serialize_with = "serialize_hour")]
@@ -78,12 +85,13 @@ pub struct AccountAge {
 
 impl fmt::Display for AccountAge {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let unit = |n: u32, word| units(i64::from(n), word);
         match (self.years, self.months, self.days) {
-            (0, 0, d) => write!(f, "{d} days"),
-            (0, m, 0) => write!(f, "{m} months"),
-            (0, m, d) => write!(f, "{m} months, {d} days"),
-            (y, 0, _) => write!(f, "{y} years"),
-            (y, m, _) => write!(f, "{y} years, {m} months"),
+            (0, 0, d) => f.write_str(&unit(d, "day")),
+            (0, m, 0) => f.write_str(&unit(m, "month")),
+            (0, m, d) => write!(f, "{}, {}", unit(m, "month"), unit(d, "day")),
+            (y, 0, _) => f.write_str(&unit(y, "year")),
+            (y, m, _) => write!(f, "{}, {}", unit(y, "year"), unit(m, "month")),
         }
     }
 }
@@ -115,6 +123,10 @@ pub struct ContributionYear {
 pub struct ContributionCalendar {
     pub days: Vec<ContributionDay>,
     pub years: Vec<ContributionYear>,
+    /// Pull request reviews per repository (`owner/name`) over all years.
+    pub reviews_by_repo: HashMap<String, u64>,
+    /// Problems that left the calendar incomplete.
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -256,7 +268,8 @@ mod tests {
         };
         assert_eq!(age(3, 2, 5), "3 years, 2 months");
         assert_eq!(age(3, 0, 5), "3 years");
-        assert_eq!(age(0, 4, 1), "4 months, 1 days");
+        assert_eq!(age(0, 4, 1), "4 months, 1 day");
+        assert_eq!(age(1, 1, 0), "1 year, 1 month");
         assert_eq!(age(0, 4, 0), "4 months");
         assert_eq!(age(0, 0, 9), "9 days");
     }
@@ -278,6 +291,7 @@ mod tests {
         assert!(json["PRStats"]["OpenPRs"].is_array());
         assert!(json.get("AvatarURL").is_some());
         assert!(json["AccountAge"].get("Years").is_some());
+        assert!(json.get("TotalCommitDays").is_some());
     }
 
     #[test]

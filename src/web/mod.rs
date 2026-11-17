@@ -4,11 +4,11 @@ mod charts;
 
 use std::future::Future;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use axum::Router;
+use axum::body::Bytes;
 use axum::http::StatusCode;
 use axum::response::Html;
 use axum::routing::any;
@@ -31,7 +31,7 @@ const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct Server {
     listener: TcpListener,
     addr: SocketAddr,
-    page: Arc<str>,
+    page: Bytes,
 }
 
 impl Server {
@@ -61,7 +61,8 @@ impl Server {
     pub async fn run(self, shutdown: impl Future<Output = ()>) -> Result<()> {
         let page = self.page;
         let app = Router::new()
-            .route("/", any(move || async move { Html(page.to_string()) }))
+            // Bytes clones share the rendered page instead of copying it.
+            .route("/", any(move || async move { Html(page) }))
             .fallback(|| async { (StatusCode::NOT_FOUND, "404 page not found\n") });
 
         let (stop_tx, stop_rx) = oneshot::channel::<()>();
@@ -97,6 +98,7 @@ struct PageContext {
     blog_href: String,
     joined: String,
     account_age: String,
+    includes_private_repos: bool,
     followers: String,
     following: String,
     public_repos: String,
@@ -129,6 +131,7 @@ struct ContribView {
 #[derive(Serialize)]
 struct StreakView {
     max: String,
+    max_unit: &'static str,
     max_period: Option<String>,
     current: String,
     current_since: Option<String>,
@@ -221,9 +224,10 @@ fn render(stats: &UserStats, now: DateTime<Local>) -> Result<String> {
         company: stats.company.clone(),
         location: stats.location.clone(),
         blog: stats.blog.clone(),
-        blog_href: safe_url(&stats.blog),
+        blog_href: external_url(&stats.blog),
         joined: human_date(stats.created_at.map(|t| t.date_naive())),
         account_age: stats.account_age.to_string(),
+        includes_private_repos: stats.includes_private_repos,
         followers: format::count(stats.followers),
         following: format::count(stats.following),
         public_repos: format::count(stats.public_repos),
@@ -241,6 +245,7 @@ fn render(stats: &UserStats, now: DateTime<Local>) -> Result<String> {
         ),
         streak: StreakView {
             max: format::count(stats.max_streak),
+            max_unit: if stats.max_streak == 1 { "day" } else { "days" },
             max_period: stats.max_streak_start.map(|start| {
                 format!(
                     "{} \u{2014} {}",
@@ -251,7 +256,7 @@ fn render(stats: &UserStats, now: DateTime<Local>) -> Result<String> {
             current: format::count(stats.current_streak),
             current_since: (stats.current_streak > 0)
                 .then(|| human_date(stats.current_streak_start)),
-            active_days: format::count(stats.total_commit_days),
+            active_days: format::count(stats.total_active_days),
             most_active_day: stats.most_active_day.clone(),
             most_active_hour: stats.most_active_hour.map(format::hour),
         },
@@ -400,7 +405,7 @@ fn bars(items: &[RepoCount]) -> Vec<Bar> {
 }
 
 fn positive_duration(d: TimeDelta) -> Option<String> {
-    (d > TimeDelta::zero()).then(|| format::duration(d, "min"))
+    (d > TimeDelta::zero()).then(|| format::duration(d, true))
 }
 
 fn human_date(date: Option<NaiveDate>) -> String {
@@ -424,6 +429,27 @@ fn safe_url(url: &str) -> String {
             }
         }
         _ => url.to_string(),
+    }
+}
+
+/// Turns a user-entered website into a link. GitHub keeps the text as typed,
+/// so `example.com` gets an `https://` prefix instead of becoming a link
+/// relative to this page.
+fn external_url(url: &str) -> String {
+    let url = url.trim();
+    if url.is_empty() {
+        return String::new();
+    }
+    if url.starts_with("//") {
+        return format!("https:{url}");
+    }
+    let has_scheme = url
+        .find([':', '/', '?', '#'])
+        .is_some_and(|i| url[i..].starts_with(':') && !url[..i].contains('.'));
+    if has_scheme {
+        safe_url(url)
+    } else {
+        format!("https://{url}")
     }
 }
 
@@ -529,6 +555,35 @@ mod tests {
         assert_eq!(safe_url("example.com/a:b"), "example.com/a:b");
         assert_eq!(safe_url("JavaScript:alert(1)"), "#");
         assert_eq!(safe_url("data:text/html,x"), "#");
+    }
+
+    #[test]
+    fn external_url_adds_scheme() {
+        assert_eq!(external_url("example.com"), "https://example.com");
+        assert_eq!(
+            external_url(" example.com/blog "),
+            "https://example.com/blog"
+        );
+        assert_eq!(
+            external_url("example.com:8080/x"),
+            "https://example.com:8080/x"
+        );
+        assert_eq!(external_url("//example.com"), "https://example.com");
+        assert_eq!(external_url("http://example.com"), "http://example.com");
+        assert_eq!(external_url("javascript:alert(1)"), "#");
+        assert_eq!(external_url(""), "");
+    }
+
+    #[test]
+    fn render_links_blog_without_scheme() {
+        let stats = UserStats {
+            username: "octocat".into(),
+            blog: "example.com".into(),
+            ..UserStats::default()
+        };
+        let html = render(&stats, Local::now()).unwrap();
+        // HTML escaping writes "/" as an entity, which browsers decode.
+        assert!(html.contains(r#"href="https:&#x2f;&#x2f;example.com""#), "{html}");
     }
 
     #[test]

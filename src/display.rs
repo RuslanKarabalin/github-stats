@@ -1,4 +1,7 @@
 //! Terminal output: status messages and the statistics report.
+//!
+//! Status messages go to stderr so that stdout carries only the report,
+//! which keeps `--format json` output parseable.
 
 use anyhow::Result;
 use chrono::{DateTime, Local, Utc};
@@ -21,19 +24,22 @@ const TABLE_STYLE: TableStyle = TableStyle::new()
     .bottom_border(LineStyle::new('└', '─', '┴', '┘'));
 
 pub fn success(message: &str) {
-    println!("{}", style(format!("✓ {message}")).green());
+    eprintln!("{}", style(format!("✓ {message}")).for_stderr().green());
 }
 
 pub fn warning(message: &str) {
-    println!("{}", style(format!("⚠ {message}")).yellow());
+    eprintln!("{}", style(format!("⚠ {message}")).for_stderr().yellow());
 }
 
 pub fn error(message: &str) {
-    println!("{}", style(format!("✗ {message}")).red().bold());
+    eprintln!(
+        "{}",
+        style(format!("✗ {message}")).for_stderr().red().bold()
+    );
 }
 
 pub fn heading(message: &str) {
-    println!("{}", style(message).cyan().bold());
+    eprintln!("{}", style(message).for_stderr().cyan().bold());
 }
 
 pub fn print_stats(stats: &UserStats, format: Format) -> Result<()> {
@@ -81,6 +87,10 @@ fn date_short<T: chrono::Datelike>(t: Option<T>) -> String {
         .unwrap_or_default()
 }
 
+fn days(n: u32) -> String {
+    format::units(i64::from(n), "day")
+}
+
 fn month_abbr(month: u32) -> &'static str {
     const NAMES: [&str; 12] = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -121,7 +131,11 @@ fn print_tables(stats: &UserStats) {
     ]);
     println!("{}", table(["Field", "Value"], rows));
 
-    section("📚 REPOSITORY STATISTICS");
+    section(if stats.includes_private_repos {
+        "📚 REPOSITORY STATISTICS (including private)"
+    } else {
+        "📚 REPOSITORY STATISTICS"
+    });
     println!(
         "{}",
         table(
@@ -143,7 +157,7 @@ fn print_tables(stats: &UserStats) {
     if stats.current_streak > 0 {
         rows.push([
             "Current Streak".into(),
-            format!("{} days 🔥", stats.current_streak),
+            format!("{} 🔥", days(stats.current_streak)),
         ]);
         rows.push([
             "Current Streak Start".into(),
@@ -154,7 +168,7 @@ fn print_tables(stats: &UserStats) {
     }
     rows.push([
         "Maximum Streak".into(),
-        format!("{} days 🏆", stats.max_streak),
+        format!("{} 🏆", days(stats.max_streak)),
     ]);
     if stats.max_streak_start.is_some() {
         rows.push([
@@ -168,7 +182,7 @@ fn print_tables(stats: &UserStats) {
     }
     rows.push([
         "Total Active Days".into(),
-        stats.total_commit_days.to_string(),
+        stats.total_active_days.to_string(),
     ]);
     println!("{}", table(["Metric", "Value"], rows));
 
@@ -179,7 +193,7 @@ fn print_tables(stats: &UserStats) {
             rows.push(["Most Active Day".into(), day.clone()]);
         }
         if let Some(hour) = stats.most_active_hour {
-            rows.push(["Most Active Hour".into(), format::hour(hour)]);
+            rows.push(["Most Active Hour (UTC)".into(), format::hour(hour)]);
         }
         println!("{}", table(["Metric", "Value"], rows));
     }
@@ -239,7 +253,7 @@ fn print_tables(stats: &UserStats) {
         if prs.avg_merge_time > chrono::TimeDelta::zero() {
             rows.push([
                 "Avg Time to Merge".into(),
-                format::duration(prs.avg_merge_time, "minutes"),
+                format::duration(prs.avg_merge_time, false),
             ]);
         }
         println!("{}", table(["Metric", "Value"], rows));
@@ -279,7 +293,7 @@ fn print_tables(stats: &UserStats) {
         if issues.avg_close_time > chrono::TimeDelta::zero() {
             rows.push([
                 "Avg Time to Close".into(),
-                format::duration(issues.avg_close_time, "minutes"),
+                format::duration(issues.avg_close_time, false),
             ]);
         }
         println!("{}", table(["Metric", "Value"], rows));
@@ -291,7 +305,7 @@ fn print_tables(stats: &UserStats) {
             "{}",
             table(
                 ["Metric", "Value"],
-                [["Total Reviews".into(), reviews.total.to_string()]]
+                [["Total Reviews (all time)".into(), reviews.total.to_string()]]
             )
         );
 

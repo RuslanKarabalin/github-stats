@@ -14,5 +14,3 @@ dist/
 .cache/
 
 config.yaml
-*.yaml
-!.env.example

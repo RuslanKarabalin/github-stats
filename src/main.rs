@@ -76,36 +76,50 @@ async fn collect_stats(cfg: &Config) -> Option<UserStats> {
         }
     };
 
-    let username = match cfg.username.clone() {
-        Some(username) => username,
-        None => {
-            let result =
-                with_spinner("Getting authenticated user...", client.authenticated_user()).await;
-            match result {
-                Ok(username) => {
-                    display::success(&format!("Authenticated as: {username}"));
-                    username
-                }
-                Err(err) => {
-                    display::error(&format!("Failed to get authenticated user: {err:#}"));
-                    return None;
-                }
+    // The authenticated login is needed when no user was given, and to make
+    // sure --private is only used for the token's own account.
+    let login = if cfg.username.is_none() || cfg.include_private {
+        match with_spinner("Getting authenticated user...", client.authenticated_user()).await {
+            Ok(login) => {
+                display::success(&format!("Authenticated as: {login}"));
+                Some(login)
+            }
+            Err(err) if cfg.username.is_none() => {
+                display::error(&format!("Failed to get authenticated user: {err:#}"));
+                return None;
+            }
+            Err(err) => {
+                display::warning(&format!("Failed to get authenticated user: {err:#}"));
+                None
             }
         }
+    } else {
+        None
     };
+
+    let username = cfg.username.clone().or_else(|| login.clone())?;
+    let include_private = cfg.include_private
+        && login
+            .as_deref()
+            .is_some_and(|login| login.eq_ignore_ascii_case(&username));
+    if cfg.include_private && !include_private {
+        display::warning(
+            "--private only works for the authenticated user; using public repositories only",
+        );
+    }
 
     if let Err(err) = check_rate_limit(&client).await {
         display::warning(&format!("Rate limit check failed: {err:#}"));
     }
 
-    println!();
+    eprintln!();
     display::heading("🚀 Fetching GitHub statistics...");
-    println!();
+    eprintln!();
 
     let mut calculator = StatsCalculator::new(&client);
     let result = with_spinner(
         "Analyzing profile and repositories...",
-        calculator.calculate(&username, cfg.full_scan),
+        calculator.calculate(&username, cfg.full_scan, include_private),
     )
     .await;
 
@@ -125,21 +139,31 @@ async fn collect_stats(cfg: &Config) -> Option<UserStats> {
     Some(stats)
 }
 
+/// Reports the remaining budget of each API the tool uses, warning about the
+/// ones that are nearly used up.
 async fn check_rate_limit(client: &Client) -> Result<()> {
-    if let Some(rate) = client.rate_limit().await? {
-        if rate.remaining < 100 {
+    let limits = client.rate_limit().await?;
+    let budgets = [
+        ("core", limits.core, 100),
+        ("GraphQL", limits.graphql, 100),
+        ("search", limits.search, 10),
+    ];
+
+    let mut summary = Vec::new();
+    for (name, rate, low) in budgets {
+        let Some(rate) = rate else { continue };
+        summary.push(format!("{name} {}/{}", rate.remaining, rate.limit));
+        if rate.remaining < low {
             display::warning(&format!(
-                "API Rate Limit: {}/{} remaining (resets at {})",
+                "API Rate Limit: {name} has {}/{} remaining (resets at {})",
                 rate.remaining,
                 rate.limit,
                 rate.reset.format("%H:%M:%S")
             ));
-        } else {
-            display::success(&format!(
-                "API Rate Limit: {}/{} remaining",
-                rate.remaining, rate.limit
-            ));
         }
+    }
+    if !summary.is_empty() {
+        display::success(&format!("API Rate Limit: {}", summary.join(", ")));
     }
     Ok(())
 }
