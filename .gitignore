@@ -1,18 +1,6 @@
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+/target/
 bin/
 dist/
-
-*.test
-
-*.out
-
-vendor/
-
-go.work
 
 .env
 .env.local

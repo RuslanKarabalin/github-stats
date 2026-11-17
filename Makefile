@@ -1,41 +1,29 @@
 BINARY_NAME=github-stats
-BUILD_DIR=./bin
-MAIN_PATH=./cmd/github-stats/main.go
+BUILD_DIR=./target/release
+CARGO=cargo
 
-GOCMD=go
-GOBUILD=$(GOCMD) build
-GOCLEAN=$(GOCMD) clean
-GOTEST=$(GOCMD) test
-GOGET=$(GOCMD) get
-GOMOD=$(GOCMD) mod
-
-LDFLAGS=-ldflags "-s -w"
-
-.PHONY: all build clean test deps install run web help
+.PHONY: all build clean test deps install uninstall run user full web fmt lint help
 
 all: deps build
 
 build:
 	@echo "Building $(BINARY_NAME)..."
-	@mkdir -p $(BUILD_DIR)
-	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	$(CARGO) build --release
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
 
 deps:
-	@echo "Installing dependencies..."
-	$(GOMOD) download
-	$(GOMOD) tidy
-	@echo "Dependencies installed"
+	@echo "Fetching dependencies..."
+	$(CARGO) fetch
+	@echo "Dependencies fetched"
 
 clean:
 	@echo "Cleaning..."
-	$(GOCLEAN)
-	rm -rf $(BUILD_DIR)
+	$(CARGO) clean
 	@echo "Clean complete"
 
 test:
 	@echo "Running tests..."
-	$(GOTEST) -v ./...
+	$(CARGO) test
 
 install: build
 	@echo "Installing $(BINARY_NAME) to /usr/local/bin..."
@@ -51,40 +39,40 @@ run: build
 	@echo "Running $(BINARY_NAME)..."
 	$(BUILD_DIR)/$(BINARY_NAME)
 
-user:
+user: build
 	@echo "Running $(BINARY_NAME) with user flag..."
 	$(BUILD_DIR)/$(BINARY_NAME) --user $(USER)
 
-full:
+full: build
 	@echo "Running $(BINARY_NAME) with full scan..."
 	$(BUILD_DIR)/$(BINARY_NAME) --user $(USER) --full
 
-web:
+web: build
 	@echo "Running $(BINARY_NAME) with web output..."
 	$(BUILD_DIR)/$(BINARY_NAME) --user $(USER) --web
 
 fmt:
 	@echo "Formatting code..."
-	$(GOCMD) fmt ./...
+	$(CARGO) fmt
 	@echo "Format complete"
 
 lint:
 	@echo "Running linter..."
-	golangci-lint run ./...
+	$(CARGO) clippy --all-targets -- -D warnings
 
 help:
 	@echo "Available targets:"
-	@echo "  all        - Install dependencies and build (default)"
-	@echo "  build      - Build the binary"
-	@echo "  deps       - Install dependencies"
+	@echo "  all        - Fetch dependencies and build (default)"
+	@echo "  build      - Build the release binary"
+	@echo "  deps       - Fetch dependencies"
 	@echo "  clean      - Remove build artifacts"
 	@echo "  test       - Run tests"
 	@echo "  install    - Install binary to /usr/local/bin"
 	@echo "  uninstall  - Remove binary from /usr/local/bin"
 	@echo "  run        - Build and run the application"
-	@echo "  user       - Run with USER env var (make run-user USER=octocat)"
-	@echo "  full       - Run with full scan (make run-full USER=octocat)"
+	@echo "  user       - Run for a user (make user USER=octocat)"
+	@echo "  full       - Run with full scan (make full USER=octocat)"
 	@echo "  web        - Serve statistics on localhost (make web USER=octocat)"
 	@echo "  fmt        - Format code"
-	@echo "  lint       - Run linter"
+	@echo "  lint       - Run clippy"
 	@echo "  help       - Show this help message"

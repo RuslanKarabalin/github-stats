@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GitHub Statistics · @{{.Stats.Username}}</title>
+<title>GitHub Statistics · @{{ username }}</title>
 <style>
 :root {
   color-scheme: light;
@@ -561,17 +561,17 @@ footer {
 <main class="page">
 
   <section class="card profile">
-    {{if .Stats.AvatarURL}}<img class="avatar" src="{{.Stats.AvatarURL}}" alt="" referrerpolicy="no-referrer">{{end}}
+    {% if avatar_url %}<img class="avatar" src="{{ avatar_url }}" alt="" referrerpolicy="no-referrer">{% endif %}
     <div class="identity">
-      <h1>{{if .Stats.Name}}{{.Stats.Name}}{{else}}{{.Stats.Username}}{{end}}</h1>
-      <p class="handle">@{{.Stats.Username}}</p>
-      {{if .Stats.Bio}}<p class="bio">{{.Stats.Bio}}</p>{{end}}
+      <h1>{{ display_name }}</h1>
+      <p class="handle">@{{ username }}</p>
+      {% if bio %}<p class="bio">{{ bio }}</p>{% endif %}
       <ul class="meta">
-        {{if .Stats.Company}}<li>{{.Stats.Company}}</li>{{end}}
-        {{if .Stats.Location}}<li>{{.Stats.Location}}</li>{{end}}
-        {{if .Stats.Blog}}<li><a href="{{.Stats.Blog}}" rel="noreferrer">{{.Stats.Blog}}</a></li>{{end}}
-        <li>Joined {{date .Stats.CreatedAt}}</li>
-        <li>{{.Stats.AccountAge}} on GitHub</li>
+        {% if company %}<li>{{ company }}</li>{% endif %}
+        {% if location %}<li>{{ location }}</li>{% endif %}
+        {% if blog %}<li><a href="{{ blog_href }}" rel="noreferrer">{{ blog }}</a></li>{% endif %}
+        <li>Joined {{ joined }}</li>
+        <li>{{ account_age }} on GitHub</li>
       </ul>
     </div>
   </section>
@@ -579,23 +579,23 @@ footer {
   <section class="card">
     <h2>Profile</h2>
     <div class="tiles">
-      <div class="tile"><div class="label">Followers</div><div class="value">{{count .Stats.Followers}}</div></div>
-      <div class="tile"><div class="label">Following</div><div class="value">{{count .Stats.Following}}</div></div>
-      <div class="tile"><div class="label">Public repositories</div><div class="value">{{count .Stats.PublicRepos}}</div></div>
-      <div class="tile"><div class="label">Public gists</div><div class="value">{{count .Stats.PublicGists}}</div></div>
-      <div class="tile"><div class="label">Stars received</div><div class="value">{{count .Stats.TotalStars}}</div></div>
-      <div class="tile"><div class="label">Forks received</div><div class="value">{{count .Stats.TotalForks}}</div></div>
+      <div class="tile"><div class="label">Followers</div><div class="value">{{ followers }}</div></div>
+      <div class="tile"><div class="label">Following</div><div class="value">{{ following }}</div></div>
+      <div class="tile"><div class="label">Public repositories</div><div class="value">{{ public_repos }}</div></div>
+      <div class="tile"><div class="label">Public gists</div><div class="value">{{ public_gists }}</div></div>
+      <div class="tile"><div class="label">Stars received</div><div class="value">{{ total_stars }}</div></div>
+      <div class="tile"><div class="label">Forks received</div><div class="value">{{ total_forks }}</div></div>
     </div>
   </section>
 
-  {{with .Contrib}}
+  {% if contrib %}
   <section class="card" data-chart="heatmap">
     <h2>Contributions</h2>
     <div class="tiles">
-      <div class="tile"><div class="label">All time</div><div class="value">{{count .Total}}</div></div>
-      <div class="tile"><div class="label">This year</div><div class="value">{{count .ThisYear}}</div></div>
-      <div class="tile"><div class="label">Best day</div><div class="value">{{count .BestCount}}</div><div class="label">{{date .BestDate}}</div></div>
-      <div class="tile"><div class="label">Average per active day</div><div class="value">{{printf "%.1f" .ActiveAvg}}</div></div>
+      <div class="tile"><div class="label">All time</div><div class="value">{{ contrib.total }}</div></div>
+      <div class="tile"><div class="label">This year</div><div class="value">{{ contrib.this_year }}</div></div>
+      <div class="tile"><div class="label">Best day</div><div class="value">{{ contrib.best_count }}</div><div class="label">{{ contrib.best_date }}</div></div>
+      <div class="tile"><div class="label">Average per active day</div><div class="value">{{ contrib.active_avg }}</div></div>
     </div>
     <h3>Calendar</h3>
     <div class="segmented" role="group" aria-label="Calendar period" style="margin-bottom: 14px"></div>
@@ -606,47 +606,47 @@ footer {
     </div>
     <div class="table-slot"></div>
   </section>
-  {{end}}
+  {% endif %}
 
   <section class="card">
     <h2>Contribution streaks</h2>
     <div class="streak">
       <div class="hero">
         <div class="label">Longest streak</div>
-        <div><span class="value">{{count .Stats.MaxStreak}}</span><span class="unit">days</span></div>
-        {{if not .Stats.MaxStreakStart.IsZero}}
-          <div class="period">{{date .Stats.MaxStreakStart}} — {{date .Stats.MaxStreakEnd}}</div>
-        {{end}}
+        <div><span class="value">{{ streak.max }}</span><span class="unit">days</span></div>
+        {% if streak.max_period %}
+          <div class="period">{{ streak.max_period }}</div>
+        {% endif %}
       </div>
       <div class="tiles">
         <div class="tile">
           <div class="label">Current streak</div>
-          <div class="value">{{count .Stats.CurrentStreak}}</div>
-          {{if gt .Stats.CurrentStreak 0}}<div class="label">since {{date .Stats.CurrentStreakStart}}</div>{{end}}
+          <div class="value">{{ streak.current }}</div>
+          {% if streak.current_since %}<div class="label">since {{ streak.current_since }}</div>{% endif %}
         </div>
-        <div class="tile"><div class="label">Total active days</div><div class="value">{{count .Stats.TotalCommitDays}}</div></div>
-        {{if .Stats.MostActiveDay}}
-          <div class="tile"><div class="label">Most active day</div><div class="value">{{.Stats.MostActiveDay}}</div></div>
-        {{end}}
-        {{if ge .Stats.MostActiveHour 0}}
-          <div class="tile"><div class="label">Most active hour</div><div class="value">{{hour .Stats.MostActiveHour}}</div></div>
-        {{end}}
+        <div class="tile"><div class="label">Total active days</div><div class="value">{{ streak.active_days }}</div></div>
+        {% if streak.most_active_day %}
+          <div class="tile"><div class="label">Most active day</div><div class="value">{{ streak.most_active_day }}</div></div>
+        {% endif %}
+        {% if streak.most_active_hour %}
+          <div class="tile"><div class="label">Most active hour</div><div class="value">{{ streak.most_active_hour }}</div></div>
+        {% endif %}
       </div>
     </div>
   </section>
 
-  {{if .Charts.Monthly}}
+  {% if charts.monthly %}
   <section class="card" data-chart="monthly">
     <h2>Contributions over time</h2>
     <p class="subtitle">Total contributions per month, from the first active month</p>
     <div class="chart"></div>
     <div class="table-slot"></div>
   </section>
-  {{end}}
+  {% endif %}
 
-  {{if or .Charts.Years .Charts.Weekdays}}
+  {% if charts.years or charts.weekdays %}
   <div class="columns">
-    {{if .Charts.Years}}
+    {% if charts.years %}
     <section class="card" data-chart="mix">
       <h2>Contribution mix by year</h2>
       <p class="subtitle">Other covers new repositories and private contributions</p>
@@ -654,75 +654,75 @@ footer {
       <div class="chart"></div>
       <div class="table-slot"></div>
     </section>
-    {{end}}
+    {% endif %}
 
-    {{if .Charts.Weekdays}}
+    {% if charts.weekdays %}
     <section class="card" data-chart="weekday">
       <h2>Activity by weekday</h2>
       <p class="subtitle">Average contributions per day, idle days included</p>
       <div class="chart"></div>
       <div class="table-slot"></div>
     </section>
-    {{end}}
+    {% endif %}
   </div>
-  {{end}}
+  {% endif %}
 
-  {{if .Languages}}
+  {% if languages %}
   <section class="card">
     <h2>Languages</h2>
     <div class="langbar">
-      {{range .Languages}}<span class="s{{.Slot}}" style="{{.Style}}" data-tip="{{.Name}}" data-tip-value="{{printf "%.1f" .Pct}}%" data-tip-label="{{.Detail}}"></span>{{end}}
+      {% for s in languages %}<span class="s{{ s.slot }}" style="{{ s.style }}" data-tip="{{ s.name }}" data-tip-value="{{ s.pct_label }}%" data-tip-label="{{ s.detail }}"></span>{% endfor %}
     </div>
     <ul class="legend">
-      {{range .Languages}}
+      {% for s in languages %}
       <li>
-        <span class="swatch s{{.Slot}}"></span>
-        <span class="name">{{.Name}}</span>
-        <span class="pct">{{printf "%.1f" .Pct}}%</span>
-        <span class="size">{{.Detail}}</span>
+        <span class="swatch s{{ s.slot }}"></span>
+        <span class="name">{{ s.name }}</span>
+        <span class="pct">{{ s.pct_label }}%</span>
+        <span class="size">{{ s.detail }}</span>
       </li>
-      {{end}}
+      {% endfor %}
     </ul>
   </section>
-  {{end}}
+  {% endif %}
 
   <div class="columns">
-    {{if .Stats.TopRepositories}}
+    {% if top_repositories %}
     <section class="card">
       <h2>Top repositories by stars</h2>
       <table>
         <thead><tr><th>Repository</th><th>Language</th><th class="num">Stars</th><th class="num">Forks</th></tr></thead>
         <tbody>
-          {{range .Stats.TopRepositories}}
+          {% for r in top_repositories %}
           <tr>
-            <td>{{.Name}}</td>
-            <td class="muted">{{if .Language}}{{.Language}}{{else}}—{{end}}</td>
-            <td class="num">{{count .Stars}}</td>
-            <td class="num">{{count .Forks}}</td>
+            <td>{{ r.name }}</td>
+            <td class="muted">{{ r.language }}</td>
+            <td class="num">{{ r.stars }}</td>
+            <td class="num">{{ r.forks }}</td>
           </tr>
-          {{end}}
+          {% endfor %}
         </tbody>
       </table>
     </section>
-    {{end}}
+    {% endif %}
 
-    {{if .CommitBars}}
+    {% if commit_bars %}
     <section class="card">
       <h2>Top repositories by commits</h2>
       <div class="bars">
-        {{range .CommitBars}}
-        <div class="bar-row" data-tip="{{.Label}}" data-tip-value="{{.Value}}" data-tip-label="commits">
-          <div class="name">{{.Label}}</div>
-          <div><div class="fill" style="{{.Style}}"></div></div>
-          <div class="value">{{.Value}}</div>
+        {% for b in commit_bars %}
+        <div class="bar-row" data-tip="{{ b.label }}" data-tip-value="{{ b.value }}" data-tip-label="commits">
+          <div class="name">{{ b.label }}</div>
+          <div><div class="fill" style="{{ b.style }}"></div></div>
+          <div class="value">{{ b.value }}</div>
         </div>
-        {{end}}
+        {% endfor %}
       </div>
     </section>
-    {{end}}
+    {% endif %}
   </div>
 
-  {{if .Charts.Repos}}
+  {% if charts.repos %}
   <section class="card" data-chart="repos">
     <h2>Repositories created per year</h2>
     <p class="subtitle">Public repositories owned by the user</p>
@@ -730,117 +730,111 @@ footer {
     <div class="chart"></div>
     <div class="table-slot"></div>
   </section>
-  {{end}}
+  {% endif %}
 
-  {{with .Stats.PRStats}}
-  {{if gt .Total 0}}
+  {% if prs %}
   <section class="card">
     <h2>Pull requests</h2>
     <div class="tiles">
-      <div class="tile"><div class="label">Created</div><div class="value">{{count .Total}}</div></div>
-      <div class="tile"><div class="label">Open</div><div class="value">{{count .Open}}</div></div>
-      <div class="tile"><div class="label">Merged</div><div class="value">{{count .Merged}}</div></div>
-      <div class="tile"><div class="label">Closed unmerged</div><div class="value">{{count .Closed}}</div></div>
-      {{if gt .AvgMergeTime 0}}
-        <div class="tile"><div class="label">Avg time to merge</div><div class="value">{{duration .AvgMergeTime}}</div></div>
-      {{end}}
+      <div class="tile"><div class="label">Created</div><div class="value">{{ prs.total }}</div></div>
+      <div class="tile"><div class="label">Open</div><div class="value">{{ prs.open }}</div></div>
+      <div class="tile"><div class="label">Merged</div><div class="value">{{ prs.merged }}</div></div>
+      <div class="tile"><div class="label">Closed unmerged</div><div class="value">{{ prs.closed }}</div></div>
+      {% if prs.avg_merge_time %}
+        <div class="tile"><div class="label">Avg time to merge</div><div class="value">{{ prs.avg_merge_time }}</div></div>
+      {% endif %}
     </div>
 
-    {{if $.PROutcomes}}
+    {% if prs.outcomes %}
     <div class="outcome">
       <div class="langbar">
-        {{range $.PROutcomes}}{{if gt .Pct 0.0}}<span class="s{{.Slot}}" style="{{.Style}}" data-tip="{{.Name}}" data-tip-value="{{.Detail}}" data-tip-label="{{printf "%.1f" .Pct}}%"></span>{{end}}{{end}}
+        {% for s in prs.outcomes %}{% if s.pct > 0 %}<span class="s{{ s.slot }}" style="{{ s.style }}" data-tip="{{ s.name }}" data-tip-value="{{ s.detail }}" data-tip-label="{{ s.pct_label }}%"></span>{% endif %}{% endfor %}
       </div>
       <ul class="legend">
-        {{range $.PROutcomes}}
+        {% for s in prs.outcomes %}
         <li>
-          <span class="swatch s{{.Slot}}"></span>
-          <span class="name">{{.Name}}</span>
-          <span class="pct">{{printf "%.1f" .Pct}}%</span>
-          <span class="size">{{.Detail}}</span>
+          <span class="swatch s{{ s.slot }}"></span>
+          <span class="name">{{ s.name }}</span>
+          <span class="pct">{{ s.pct_label }}%</span>
+          <span class="size">{{ s.detail }}</span>
         </li>
-        {{end}}
+        {% endfor %}
       </ul>
     </div>
-    {{end}}
+    {% endif %}
 
-    {{if $.PRBars}}
+    {% if prs.bars %}
     <h3>Top repositories by pull requests</h3>
     <div class="bars">
-      {{range $.PRBars}}
-      <div class="bar-row" data-tip="{{.Label}}" data-tip-value="{{.Value}}" data-tip-label="pull requests">
-        <div class="name">{{.Label}}</div>
-        <div><div class="fill" style="{{.Style}}"></div></div>
-        <div class="value">{{.Value}}</div>
+      {% for b in prs.bars %}
+      <div class="bar-row" data-tip="{{ b.label }}" data-tip-value="{{ b.value }}" data-tip-label="pull requests">
+        <div class="name">{{ b.label }}</div>
+        <div><div class="fill" style="{{ b.style }}"></div></div>
+        <div class="value">{{ b.value }}</div>
       </div>
-      {{end}}
+      {% endfor %}
     </div>
-    {{end}}
+    {% endif %}
 
-    {{if .OpenPRs}}
+    {% if prs.open_prs %}
     <h3>Currently open</h3>
     <table>
       <thead><tr><th>Repository</th><th>Title</th><th class="num">Opened</th></tr></thead>
       <tbody>
-        {{range .OpenPRs}}
+        {% for pr in prs.open_prs %}
         <tr>
-          <td class="muted">{{.RepoName}}</td>
-          <td><a href="{{.URL}}" rel="noreferrer">#{{.Number}} {{.Title}}</a></td>
-          <td class="num">{{date .CreatedAt}}</td>
+          <td class="muted">{{ pr.repo_name }}</td>
+          <td><a href="{{ pr.url }}" rel="noreferrer">#{{ pr.number }} {{ pr.title }}</a></td>
+          <td class="num">{{ pr.opened }}</td>
         </tr>
-        {{end}}
+        {% endfor %}
       </tbody>
     </table>
-    {{end}}
+    {% endif %}
   </section>
-  {{end}}
-  {{end}}
+  {% endif %}
 
   <div class="columns">
-    {{with .Stats.IssueStats}}
-    {{if gt .Total 0}}
+    {% if issues %}
     <section class="card">
       <h2>Issues</h2>
       <div class="tiles">
-        <div class="tile"><div class="label">Created</div><div class="value">{{count .Total}}</div></div>
-        <div class="tile"><div class="label">Open</div><div class="value">{{count .Open}}</div></div>
-        <div class="tile"><div class="label">Closed</div><div class="value">{{count .Closed}}</div></div>
-        {{if gt .AvgCloseTime 0}}
-          <div class="tile"><div class="label">Avg time to close</div><div class="value">{{duration .AvgCloseTime}}</div></div>
-        {{end}}
+        <div class="tile"><div class="label">Created</div><div class="value">{{ issues.total }}</div></div>
+        <div class="tile"><div class="label">Open</div><div class="value">{{ issues.open }}</div></div>
+        <div class="tile"><div class="label">Closed</div><div class="value">{{ issues.closed }}</div></div>
+        {% if issues.avg_close_time %}
+          <div class="tile"><div class="label">Avg time to close</div><div class="value">{{ issues.avg_close_time }}</div></div>
+        {% endif %}
       </div>
     </section>
-    {{end}}
-    {{end}}
+    {% endif %}
 
-    {{with .Stats.ReviewStats}}
-    {{if gt .Total 0}}
+    {% if reviews %}
     <section class="card">
       <h2>Code reviews</h2>
       <div class="tiles">
-        <div class="tile"><div class="label">Reviews submitted</div><div class="value">{{count .Total}}</div></div>
+        <div class="tile"><div class="label">Reviews submitted</div><div class="value">{{ reviews.total }}</div></div>
       </div>
-      {{if $.ReviewBars}}
+      {% if reviews.bars %}
       <h3>Top repositories by reviews</h3>
       <div class="bars">
-        {{range $.ReviewBars}}
-        <div class="bar-row" data-tip="{{.Label}}" data-tip-value="{{.Value}}" data-tip-label="reviews">
-          <div class="name">{{.Label}}</div>
-          <div><div class="fill" style="{{.Style}}"></div></div>
-          <div class="value">{{.Value}}</div>
+        {% for b in reviews.bars %}
+        <div class="bar-row" data-tip="{{ b.label }}" data-tip-value="{{ b.value }}" data-tip-label="reviews">
+          <div class="name">{{ b.label }}</div>
+          <div><div class="fill" style="{{ b.style }}"></div></div>
+          <div class="value">{{ b.value }}</div>
         </div>
-        {{end}}
+        {% endfor %}
       </div>
-      {{end}}
+      {% endif %}
     </section>
-    {{end}}
-    {{end}}
+    {% endif %}
   </div>
 
-  <footer>Generated at {{.GeneratedAt}}</footer>
+  <footer>Generated at {{ generated_at }}</footer>
 
 </main>
-<script type="application/json" id="chart-data">{{.Charts}}</script>
-<script>{{.ChartsScript}}</script>
+<script type="application/json" id="chart-data">{{ chart_json|safe }}</script>
+<script>{{ charts_script|safe }}</script>
 </body>
 </html>
