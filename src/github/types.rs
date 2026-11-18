@@ -6,8 +6,6 @@ use serde::Serialize;
 
 use crate::format::units;
 
-/// Everything the tool knows about a user. Field names in JSON output match
-/// the original Go version of the tool.
 #[derive(Debug, Default, Clone, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserStats {
@@ -26,8 +24,8 @@ pub struct UserStats {
     pub public_gists: u64,
     pub followers: u64,
     pub following: u64,
-    /// Whether private repositories are included in the repository numbers.
     pub includes_private_repos: bool,
+    pub total_repos: u64,
 
     pub account_age: AccountAge,
     pub total_stars: u64,
@@ -40,14 +38,11 @@ pub struct UserStats {
     pub max_streak_start: Option<NaiveDate>,
     #[serde(with = "serde_date::opt")]
     pub max_streak_end: Option<NaiveDate>,
-    /// Days with at least one contribution of any kind.
     #[serde(rename = "TotalCommitDays")]
     pub total_active_days: u32,
 
     pub languages: BTreeMap<String, u64>,
-    /// Weekday with the most contributions.
     pub most_active_day: Option<String>,
-    /// Hour of day (UTC). Serialized as -1 when unknown.
     #[serde(serialize_with = "serialize_hour")]
     pub most_active_hour: Option<u32>,
     pub top_repositories: Vec<Repository>,
@@ -96,7 +91,6 @@ impl fmt::Display for AccountAge {
     }
 }
 
-/// A day with at least one contribution on the user's calendar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct ContributionDay {
@@ -105,7 +99,6 @@ pub struct ContributionDay {
     pub count: u32,
 }
 
-/// One calendar year of contributions broken down by type.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct ContributionYear {
@@ -123,9 +116,7 @@ pub struct ContributionYear {
 pub struct ContributionCalendar {
     pub days: Vec<ContributionDay>,
     pub years: Vec<ContributionYear>,
-    /// Pull request reviews per repository (`owner/name`) over all years.
     pub reviews_by_repo: HashMap<String, u64>,
-    /// Problems that left the calendar incomplete.
     pub warnings: Vec<String>,
 }
 
@@ -193,7 +184,6 @@ pub struct LanguageStat {
     pub percentage: f64,
 }
 
-/// Languages sorted by size, largest first.
 pub fn language_stats(languages: &BTreeMap<String, u64>) -> Vec<LanguageStat> {
     let total: u64 = languages.values().sum();
     let mut stats: Vec<LanguageStat> = languages
@@ -208,7 +198,6 @@ pub fn language_stats(languages: &BTreeMap<String, u64>) -> Vec<LanguageStat> {
             },
         })
         .collect();
-    // BTreeMap iteration is sorted by name, so a stable sort breaks ties by name.
     stats.sort_by_key(|l| std::cmp::Reverse(l.bytes));
     stats
 }
@@ -220,7 +209,6 @@ fn serialize_hour<S: serde::Serializer>(hour: &Option<u32>, s: S) -> Result<S::O
     }
 }
 
-/// Serializes a calendar date as midnight UTC, the way the Go version did.
 mod serde_date {
     use chrono::NaiveDate;
     use serde::Serializer;
@@ -242,7 +230,6 @@ mod serde_date {
     }
 }
 
-/// Serializes a duration as integer nanoseconds, like Go's time.Duration.
 mod serde_nanos {
     use chrono::TimeDelta;
     use serde::Serializer;

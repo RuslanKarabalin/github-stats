@@ -6,8 +6,6 @@ use chrono::{DateTime, Datelike, Days, NaiveDate, Timelike, Utc, Weekday};
 use super::client::{ApiRepo, ApiUser, Client, top_repos};
 use super::types::{AccountAge, RepoYear, Repository, ReviewStats, UserStats};
 
-/// Gathers a user's statistics. Problems that only make the result less
-/// complete are reported as warnings instead of errors.
 pub struct StatsCalculator<'a> {
     client: &'a Client,
     warnings: Vec<String>,
@@ -39,10 +37,6 @@ impl<'a> StatsCalculator<'a> {
         self.warnings.extend(warning);
     }
 
-    /// Gathers the statistics of `username`. `full_scan` reads the whole
-    /// commit history for activity hours instead of recent events;
-    /// `include_private` counts private repositories, which only works when
-    /// `username` is the authenticated user.
     pub async fn calculate(
         &mut self,
         username: &str,
@@ -64,7 +58,8 @@ impl<'a> StatsCalculator<'a> {
             .await
             .context("failed to get repositories")?;
 
-        for repo in &repos {
+        stats.total_repos = repos.len() as u64;
+        for repo in repos.iter().filter(|r| !r.fork) {
             stats.total_stars += repo.stargazers_count;
             stats.total_forks += repo.forks_count;
         }
@@ -93,8 +88,6 @@ impl<'a> StatsCalculator<'a> {
         };
         let has_calendar_days = calendar.as_ref().is_some_and(|c| !c.days.is_empty());
 
-        // Exact timestamps give the busiest hour, which the calendar lacks.
-        // Without calendar days they also drive streaks, so then they are required.
         let commit_times = match self
             .client
             .commit_activity(username, &repos, full_scan)
@@ -104,7 +97,7 @@ impl<'a> StatsCalculator<'a> {
                 self.warn(failures.warning("commit history scan is incomplete"));
                 times
             }
-            Err(err) if has_calendar_days => {
+            Err(err) if calendar.is_some() => {
                 self.warnings.push(format!(
                     "failed to get recent activity, most active hour is unknown: {err:#}"
                 ));
@@ -191,8 +184,6 @@ fn populate_profile(stats: &mut UserStats, user: ApiUser, now: DateTime<Utc>) {
     }
 }
 
-/// Finds the longest run of consecutive active days and the run that is still
-/// going (one that ended today or yesterday).
 pub fn calculate_streaks(dates: &[NaiveDate], today: NaiveDate) -> StreakInfo {
     let unique: Vec<NaiveDate> = dates
         .iter()
@@ -242,8 +233,6 @@ pub fn calculate_streaks(dates: &[NaiveDate], today: NaiveDate) -> StreakInfo {
     }
 }
 
-/// The weekday with the most contributions, weighting each date by its
-/// count. Ties go to the earlier day, with weeks starting on Sunday.
 pub fn most_active_weekday(days: &[(NaiveDate, u32)]) -> Option<Weekday> {
     let mut by_day = [0u64; 7];
     for &(date, count) in days {
@@ -262,7 +251,6 @@ pub fn most_active_weekday(days: &[(NaiveDate, u32)]) -> Option<Weekday> {
     busiest(&by_day).map(|i| SUNDAY_FIRST[i])
 }
 
-/// The hour of day (UTC) with the most activity. Ties go to the earlier hour.
 pub fn most_active_hour(times: &[DateTime<Utc>]) -> Option<u32> {
     let mut by_hour = [0u64; 24];
     for time in times {
@@ -271,7 +259,6 @@ pub fn most_active_hour(times: &[DateTime<Utc>]) -> Option<u32> {
     busiest(&by_hour).map(|h| h as u32)
 }
 
-/// Index of the largest non-zero count, preferring the first on ties.
 fn busiest(counts: &[u64]) -> Option<usize> {
     let mut best: Option<usize> = None;
     for (i, &count) in counts.iter().enumerate() {
@@ -294,7 +281,6 @@ pub fn weekday_name(day: Weekday) -> &'static str {
     }
 }
 
-/// Non-fork repositories with the most stars.
 fn top_repositories(repos: &[ApiRepo], limit: usize) -> Vec<Repository> {
     let mut list: Vec<Repository> = repos
         .iter()
@@ -314,8 +300,6 @@ fn top_repositories(repos: &[ApiRepo], limit: usize) -> Vec<Repository> {
     list
 }
 
-/// Counts repositories created each year. Years without new repositories in
-/// between are included so charts get an honest time axis.
 fn repos_by_year(repos: &[ApiRepo]) -> Vec<RepoYear> {
     let mut by_year: BTreeMap<i32, RepoYear> = BTreeMap::new();
     for repo in repos {
@@ -348,9 +332,6 @@ fn repos_by_year(repos: &[ApiRepo]) -> Vec<RepoYear> {
         .collect()
 }
 
-/// Shifts a timestamp by whole years and months with Go's `AddDate`
-/// semantics: a day that does not exist in the target month overflows into
-/// the next one (Jan 31 + 1 month = Mar 3 or Mar 2).
 fn add_months(t: DateTime<Utc>, months: i32) -> DateTime<Utc> {
     let total = t.year() * 12 + t.month0() as i32 + months;
     let first = NaiveDate::from_ymd_opt(total.div_euclid(12), total.rem_euclid(12) as u32 + 1, 1)
@@ -359,7 +340,6 @@ fn add_months(t: DateTime<Utc>, months: i32) -> DateTime<Utc> {
     date.and_time(t.time()).and_utc()
 }
 
-/// Calendar distance between two instants in whole years, months and days.
 pub fn account_age(start: DateTime<Utc>, end: DateTime<Utc>) -> AccountAge {
     let mut years = 0;
     while add_months(start, (years + 1) * 12) <= end {
@@ -383,7 +363,89 @@ pub fn account_age(start: DateTime<Utc>, end: DateTime<Utc>) -> AccountAge {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
+    use crate::github::client::mock_client;
+    use axum::Json;
+    use axum::http::StatusCode;
+    use axum::routing::{get, post};
+    use chrono::{SecondsFormat, TimeDelta, TimeZone};
+    use serde_json::json;
+
+    fn quiet_user_api() -> axum::Router {
+        let created = (Utc::now() - TimeDelta::days(5)).to_rfc3339_opts(SecondsFormat::Secs, true);
+        let repo = |name: &str, fork: bool, stars: u64| {
+            json!({
+                "name": name,
+                "owner": { "login": "octocat" },
+                "fork": fork,
+                "stargazers_count": stars,
+                "forks_count": 1,
+                "created_at": created,
+            })
+        };
+        let user = json!({ "login": "octocat", "created_at": created, "public_repos": 2 });
+        let repos = json!([repo("own", false, 5), repo("upstream", true, 100)]);
+        let calendar = json!({ "data": { "user": { "contributionsCollection": {
+            "totalCommitContributions": 0,
+            "totalIssueContributions": 0,
+            "totalPullRequestContributions": 0,
+            "totalPullRequestReviewContributions": 0,
+            "totalRepositoryContributions": 0,
+            "restrictedContributionsCount": 0,
+            "contributionCalendar": { "totalContributions": 0, "weeks": [] },
+            "pullRequestReviewContributionsByRepository": []
+        }}}});
+
+        axum::Router::new()
+            .route("/users/octocat", get(move || async move { Json(user) }))
+            .route(
+                "/users/octocat/repos",
+                get(move || async move { Json(repos) }),
+            )
+            .route(
+                "/repos/octocat/own/languages",
+                get(|| async { Json(json!({ "Rust": 100 })) }),
+            )
+            .route(
+                "/repos/octocat/own/commits",
+                get(|| async { (StatusCode::CONFLICT, Json(json!({}))) }),
+            )
+            .route("/graphql", post(move || async move { Json(calendar) }))
+            .route(
+                "/users/octocat/events",
+                get(|| async {
+                    (
+                        StatusCode::NOT_FOUND,
+                        Json(json!({ "message": "Not Found" })),
+                    )
+                }),
+            )
+            .route(
+                "/search/issues",
+                get(|| async { Json(json!({ "total_count": 0, "items": [] })) }),
+            )
+    }
+
+    #[tokio::test]
+    async fn empty_calendar_tolerates_missing_events() {
+        let client = mock_client(quiet_user_api()).await;
+        let mut calculator = StatsCalculator::new(&client);
+        let stats = calculator.calculate("octocat", false, false).await.unwrap();
+
+        assert_eq!(stats.total_repos, 2);
+        assert_eq!((stats.total_stars, stats.total_forks), (5, 1));
+        assert_eq!(stats.languages.get("Rust"), Some(&100));
+        assert_eq!(stats.current_streak, 0);
+        assert_eq!(stats.most_active_hour, None);
+        assert_eq!(stats.review_stats.map(|r| r.total), Some(0));
+        assert!(
+            calculator
+                .warnings()
+                .iter()
+                .any(|w| w.contains("most active hour is unknown")),
+            "{:?}",
+            calculator.warnings()
+        );
+    }
 
     fn d(s: &str) -> NaiveDate {
         s.parse().unwrap()
@@ -430,14 +492,12 @@ mod tests {
 
     #[test]
     fn most_active_weekday_weighs_counts() {
-        // 2026-01-05 and 2026-01-12 are Mondays, 2026-01-07 is a Wednesday.
         let days = [
             (d("2026-01-05"), 1),
             (d("2026-01-12"), 1),
             (d("2026-01-07"), 5),
         ];
         assert_eq!(most_active_weekday(&days), Some(Weekday::Wed));
-        // Each weekday occurs once, so the tie goes to Sunday.
         let days = [(d("2026-01-04"), 2), (d("2026-01-05"), 2)];
         assert_eq!(most_active_weekday(&days), Some(Weekday::Sun));
         assert_eq!(most_active_weekday(&[]), None);
@@ -465,7 +525,6 @@ mod tests {
                 days: 5
             }
         );
-        // Feb 31 overflows past Mar 2, so no whole month has passed.
         assert_eq!(
             account_age(t(2026, 1, 31), t(2026, 3, 2)),
             AccountAge {

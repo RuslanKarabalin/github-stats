@@ -12,8 +12,6 @@
   const fmt1 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
   const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 
-  // ---------- helpers ----------
-
   function svgEl(tag, attrs, parent) {
     const node = document.createElementNS(NS, tag);
     for (const [key, value] of Object.entries(attrs || {})) node.setAttribute(key, value);
@@ -63,7 +61,6 @@
     return { max: Math.ceil(maxValue / step) * step, step };
   }
 
-  // Redraws on width change so charts stay crisp at any size.
   function responsive(container, draw) {
     let width = 0;
     const redraw = () => {
@@ -74,7 +71,6 @@
         draw(width);
       }
     };
-    // Drawing on the next frame keeps the observer from re-triggering itself.
     let frame = 0;
     new ResizeObserver(() => {
       cancelAnimationFrame(frame);
@@ -86,19 +82,15 @@
     };
   }
 
-  // Path for a column with a 4px rounded data-end and a square baseline.
   function columnPath(x, y, w, h, r) {
     r = Math.min(r, w / 2, h);
     return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
   }
 
-  // ---------- tooltip ----------
-
   const tip = htmlEl("div", "tooltip", document.body);
   tip.setAttribute("role", "status");
   tip.hidden = true;
 
-  // rows: [{ value, label, slot }]; slot draws a short line key in that series color.
   function showTip(x, y, title, rows) {
     tip.replaceChildren();
     htmlEl("div", "tip-title", tip, title);
@@ -129,7 +121,6 @@
     return [rect.left + rect.width / 2, rect.top + rect.height / 2];
   }
 
-  // Hover and keyboard focus show the same tooltip.
   function bindTip(node, content) {
     node.addEventListener("pointermove", (e) => {
       const c = content();
@@ -151,8 +142,6 @@
       rows: [{ value: node.dataset.tipValue, label: node.dataset.tipLabel }],
     }));
   }
-
-  // ---------- data table twin ----------
 
   function dataTable(holder, headers, rows) {
     holder.replaceChildren();
@@ -178,8 +167,6 @@
     }
   }
 
-  // ---------- y grid shared by area and column charts ----------
-
   function drawGrid(svg, m, plotWidth, plotHeight, scale, format) {
     const grid = svgEl("g", { class: "grid" }, svg);
     for (let v = 0; v <= scale.max + scale.step / 2; v += scale.step) {
@@ -192,8 +179,6 @@
       label.textContent = format(v);
     }
   }
-
-  // ---------- contribution heatmap ----------
 
   function heatmap(root) {
     const counts = new Map(data.days.map((d) => [d.date, d.count]));
@@ -243,7 +228,6 @@
       const step = Math.max(11, Math.min(17, Math.floor((width - labelWidth) / weeks)));
       const size = step - 3;
 
-      // Quartiles of the active days in view, like GitHub's own calendar.
       const values = [];
       let sum = 0;
       const months = new Map();
@@ -321,8 +305,6 @@
     const redraw = responsive(chart, draw);
   }
 
-  // ---------- monthly area chart ----------
-
   function areaChart(root, points) {
     const chart = root.querySelector(".chart");
     const n = points.length;
@@ -344,7 +326,6 @@
 
       drawGrid(svg, m, pw, ph, scale, (v) => compact.format(v));
 
-      // X labels: Januaries for long ranges, every few months for short ones.
       const minGap = 56;
       let candidates = points.map((_, i) => i);
       if (n > 24) candidates = candidates.filter((i) => points[i].month.endsWith("-01"));
@@ -362,7 +343,6 @@
       svgEl("path", { d: `M${x(0)},${y(0)}L${linePoints}L${x(n - 1)},${y(0)}Z`, class: "area" }, svg);
       svgEl("path", { d: `M${linePoints}`, class: "line" }, svg);
 
-      // Direct label on the extreme only.
       if (points[peak].count > 0) {
         svgEl("circle", { cx: x(peak), cy: y(points[peak].count), r: 4, class: "dot" }, svg);
         const label = svgEl("text", {
@@ -422,9 +402,6 @@
       points.slice().reverse().map((p) => [monthLabel(p.month), fmt.format(p.count)]));
   }
 
-  // ---------- column chart (single or stacked) ----------
-
-  // opts: { categories, series: [{ key, name, slot }], value(i, key), format, unit }
   function columnChart(root, opts) {
     const chart = root.querySelector(".chart");
     const n = opts.categories.length;
@@ -468,7 +445,6 @@
         const drawn = opts.series.filter((s) => opts.value(i, s.key) > 0);
         drawn.forEach((s, k) => {
           const h = y(opts.value(i, s.key));
-          // 2px surface gap between stacked segments.
           const gap = k > 0 ? 2 : 0;
           const segHeight = h - gap;
           const segTop = top - h;
@@ -492,7 +468,6 @@
           label.textContent = category;
         }
 
-        // The whole band is the hit target, larger than the mark.
         const hit = svgEl("rect", {
           x: m.left + band * i, y: m.top, width: band, height: ph,
           fill: "transparent", tabindex: 0, role: "img",
@@ -516,8 +491,6 @@
       return row;
     }));
   }
-
-  // ---------- wire up ----------
 
   const find = (name) => document.querySelector(`[data-chart="${name}"]`);
 

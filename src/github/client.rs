@@ -19,30 +19,24 @@ use super::types::{
 const API_URL: &str = "https://api.github.com";
 const GRAPHQL_URL: &str = "https://api.github.com/graphql";
 const PER_PAGE: u32 = 100;
-/// The events API returns at most 300 events.
 const EVENT_PAGES: u32 = 3;
-/// The search API returns at most this many results for one query.
 const SEARCH_LIMIT: usize = 1000;
+const GRAPHQL_CONCURRENCY: usize = 2;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-/// How many times a request is sent before giving up on transient errors.
 const MAX_ATTEMPTS: u32 = 4;
-/// Rate limits that reset later than this are reported instead of waited out.
 const MAX_RETRY_WAIT: Duration = Duration::from_secs(90);
-/// GitHub asks clients to wait at least a minute after a secondary rate limit
-/// that comes without a hint.
 const SECONDARY_LIMIT_WAIT: Duration = Duration::from_secs(60);
 
-/// A thin GitHub REST and GraphQL client. Requests that fan out over many
-/// repositories run at most `max_workers` at a time.
 #[derive(Clone)]
 pub struct Client {
     http: reqwest::Client,
+    api_url: String,
+    graphql_url: String,
     max_workers: usize,
 }
 
-/// A non-success HTTP response.
 #[derive(Debug)]
 pub struct ApiError {
     pub method: Method,
@@ -63,7 +57,6 @@ impl fmt::Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
-/// Failures of per-repository requests whose results are optional.
 #[derive(Debug, Default)]
 pub struct Failures {
     count: usize,
@@ -76,7 +69,6 @@ impl Failures {
         self.first.get_or_insert(err);
     }
 
-    /// A warning describing the failures, if there were any.
     pub fn warning(&self, what: &str) -> Option<String> {
         let first = self.first.as_ref()?;
         Some(if self.count == 1 {
@@ -90,7 +82,6 @@ impl Failures {
     }
 }
 
-/// One page of a paginated REST response.
 struct Page<T> {
     items: T,
     next: Option<u32>,
@@ -197,8 +188,6 @@ impl ApiIssue {
     }
 }
 
-/// Search results: the real number of matches and the items that the API
-/// returned, which are capped at `SEARCH_LIMIT`.
 struct Search {
     total: u64,
     items: Vec<ApiIssue>,
@@ -256,7 +245,6 @@ impl From<ApiRate> for Rate {
     }
 }
 
-/// The limits of the three API budgets the tool uses.
 #[derive(Debug, Clone)]
 pub struct RateLimits {
     pub core: Option<Rate>,
@@ -347,7 +335,6 @@ struct ContributionCount {
     total_count: u64,
 }
 
-/// What one calendar year of the contributions query yields.
 struct YearContributions {
     days: Vec<ContributionDay>,
     summary: ContributionYear,
@@ -415,13 +402,19 @@ impl Client {
 
         Ok(Self {
             http,
+            api_url: API_URL.to_string(),
+            graphql_url: GRAPHQL_URL.to_string(),
             max_workers: max_workers.max(1),
         })
     }
 
-    /// Sends the request built by `request`, retrying on network errors,
-    /// server errors and rate limits that reset soon. Non-success responses
-    /// become an [`ApiError`].
+    #[cfg(test)]
+    fn with_base_url(mut self, base: &str) -> Self {
+        self.api_url = base.trim_end_matches('/').to_string();
+        self.graphql_url = format!("{}/graphql", self.api_url);
+        self
+    }
+
     async fn send(&self, request: impl Fn() -> RequestBuilder) -> Result<Response> {
         let mut attempt = 1;
         loop {
@@ -477,7 +470,7 @@ impl Client {
         path: &str,
         query: &[(&str, String)],
     ) -> Result<Page<T>> {
-        let url = format!("{API_URL}{path}");
+        let url = format!("{}{path}", self.api_url);
         let resp = self.send(|| self.http.get(&url).query(query)).await?;
         let link = resp
             .headers()
@@ -503,7 +496,6 @@ impl Client {
         Ok(self.get_page(path, &[]).await?.items)
     }
 
-    /// Fetches every page of a REST list endpoint.
     async fn get_all<T: DeserializeOwned>(
         &self,
         path: &str,
@@ -526,8 +518,6 @@ impl Client {
         }
     }
 
-    /// Posts a GraphQL query. Returns the data together with the messages of
-    /// any errors that came with it; fails only when no usable data came back.
     async fn graphql<T: DeserializeOwned>(
         &self,
         query: &str,
@@ -535,7 +525,7 @@ impl Client {
     ) -> Result<(Option<T>, Vec<String>)> {
         let request = GraphQlRequest { query, variables };
         let resp = self
-            .send(|| self.http.post(GRAPHQL_URL).json(&request))
+            .send(|| self.http.post(&self.graphql_url).json(&request))
             .await
             .context("GraphQL request failed")?;
 
@@ -549,7 +539,6 @@ impl Client {
             None | Some(serde_json::Value::Null) => None,
             Some(value) => match serde_json::from_value::<T>(value) {
                 Ok(data) => Some(data),
-                // Errors can null out fields the data needs.
                 Err(_) if !errors.is_empty() => bail!("GraphQL error: {}", errors[0]),
                 Err(err) => return Err(err).context("failed to decode GraphQL data"),
             },
@@ -581,8 +570,6 @@ impl Client {
         }
     }
 
-    /// Repositories owned by `username`. With `include_private` the private
-    /// ones are listed too; that only works for the authenticated user.
     pub async fn repositories(
         &self,
         username: &str,
@@ -606,8 +593,6 @@ impl Client {
         result.context("failed to list repositories")
     }
 
-    /// Sums language bytes over all non-fork repositories, together with the
-    /// requests that failed.
     pub async fn languages(&self, repos: &[ApiRepo]) -> (BTreeMap<String, u64>, Failures) {
         let results: Vec<_> = stream::iter(repos.iter().filter(|r| !r.fork))
             .map(|repo| async move {
@@ -638,8 +623,6 @@ impl Client {
         (languages, failures)
     }
 
-    /// Timestamps of the user's activity: pushes from the recent events feed,
-    /// or with `full_scan` every commit they authored in `repos`.
     pub async fn commit_activity(
         &self,
         username: &str,
@@ -704,8 +687,6 @@ impl Client {
         (times, failures)
     }
 
-    /// Commit dates by `author` in one repository, plus the error that cut
-    /// the scan short, if any. Empty repositories are not an error.
     async fn repo_commit_dates(
         &self,
         author: &str,
@@ -755,7 +736,7 @@ impl Client {
                 let count = self
                     .count_repo_commits(username, &repo.owner.login, &repo.name)
                     .await;
-                (repo.name.clone(), count)
+                (format!("{}/{}", repo.owner.login, repo.name), count)
             })
             .buffer_unordered(self.max_workers)
             .collect()
@@ -776,8 +757,6 @@ impl Client {
         (top_repos(counts, limit), failures)
     }
 
-    /// Counts commits by asking for one commit per page and reading the
-    /// number of the last page. Empty repositories have no commits.
     async fn count_repo_commits(&self, author: &str, owner: &str, repo: &str) -> Result<u64> {
         let query = [
             ("author", author.to_string()),
@@ -793,10 +772,6 @@ impl Client {
         }
     }
 
-    /// Fetches the contribution calendar one calendar year at a time, from the
-    /// year of `since` up to the current year. The current year must succeed;
-    /// if an older year fails, the years after it are kept and a warning
-    /// explains what is missing.
     pub async fn contribution_calendar(
         &self,
         username: &str,
@@ -805,7 +780,6 @@ impl Client {
         let now = Utc::now();
         let first_year = since.map_or(now.year(), |s| s.year()).min(now.year());
 
-        // Newest year first, so a failure in an old year keeps the recent ones.
         let results: Vec<(i32, Result<YearContributions>)> =
             stream::iter((first_year..=now.year()).rev())
                 .map(|year| async move {
@@ -823,7 +797,7 @@ impl Client {
                         }),
                     )
                 })
-                .buffered(self.max_workers)
+                .buffered(self.max_workers.min(GRAPHQL_CONCURRENCY))
                 .collect()
                 .await;
 
@@ -930,8 +904,6 @@ impl Client {
         })
     }
 
-    /// Runs an issue search and returns the number of matches together with
-    /// as many results as the API allows, newest first.
     async fn search_issues(&self, query: &str) -> Result<Search> {
         let mut items = Vec::new();
         let mut total = 0;
@@ -961,15 +933,12 @@ impl Client {
         }
     }
 
-    /// The number of matches of an issue search, from a single request.
     async fn search_count(&self, query: &str) -> Result<u64> {
         let q = [("q", query.to_string()), ("per_page", "1".to_string())];
         let resp: Page<SearchResult> = self.get_page("/search/issues", &q).await?;
         Ok(resp.items.total_count)
     }
 
-    /// Pull request statistics, plus warnings when the search API could not
-    /// return every pull request.
     pub async fn pull_requests(&self, username: &str) -> Result<(PullRequestStats, Vec<String>)> {
         let mut warnings = Vec::new();
         let all = self
@@ -1000,28 +969,36 @@ impl Client {
                 .collect();
             (Search::from_items(open), Search::from_items(merged))
         } else {
+            let seen = all.items.len();
             warnings.push(format!(
-                "the search API returned only the latest {} of {} pull requests; \
+                "the search API returned only the latest {seen} of {} pull requests; \
                  top repositories by PRs are based on them",
-                all.items.len(),
                 all.total
             ));
             let open = self
                 .search_issues(&format!("author:{username} is:pr is:open"))
                 .await
                 .context("failed to search open PRs")?;
-            let merged = self
-                .search_issues(&format!("author:{username} is:pr is:merged"))
+            let merged_total = self
+                .search_count(&format!("author:{username} is:pr is:merged"))
                 .await
-                .context("failed to search merged PRs")?;
-            if !merged.complete() {
-                warnings.push(format!(
-                    "average merge time is based on the latest {} of {} merged pull requests",
-                    merged.items.len(),
-                    merged.total
-                ));
-            }
-            (open, merged)
+                .context("failed to count merged PRs")?;
+            let merged: Vec<ApiIssue> = all
+                .items
+                .into_iter()
+                .filter(|pr| pr.merged_at().is_some())
+                .collect();
+            warnings.push(format!(
+                "average merge time is based on the {} merged among the latest {seen} pull requests",
+                merged.len()
+            ));
+            (
+                open,
+                Search {
+                    total: merged_total,
+                    items: merged,
+                },
+            )
         };
 
         stats.open = open.total;
@@ -1053,8 +1030,6 @@ impl Client {
         Ok((stats, warnings))
     }
 
-    /// Issue statistics, plus warnings when the search API could not return
-    /// every issue.
     pub async fn issues(&self, username: &str) -> Result<(IssueStats, Vec<String>)> {
         let mut warnings = Vec::new();
         let all = self
@@ -1096,7 +1071,6 @@ fn has_status(err: &anyhow::Error, status: StatusCode) -> bool {
         .is_some_and(|e| e.status == status)
 }
 
-/// Exponential backoff for transient failures: 2, 4, 8 seconds.
 fn backoff(attempt: u32) -> Duration {
     Duration::from_secs(1 << attempt.min(5))
 }
@@ -1105,8 +1079,6 @@ fn header<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers.get(name)?.to_str().ok().map(str::trim)
 }
 
-/// How long to wait before retrying a failed response, or `None` when
-/// retrying cannot help.
 fn retry_delay(
     status: StatusCode,
     headers: &HeaderMap,
@@ -1149,8 +1121,6 @@ fn retry_delay(
     None
 }
 
-/// Reads the `page` number of the link with relation `rel` from a GitHub
-/// `Link` header.
 fn link_page(header: &str, rel: &str) -> Option<u32> {
     let wanted = format!("rel=\"{rel}\"");
     header.split(',').find_map(|part| {
@@ -1185,7 +1155,6 @@ fn average(durations: impl Iterator<Item = TimeDelta>) -> TimeDelta {
     }
 }
 
-/// The `limit` repositories with the highest counts, ties broken by name.
 pub fn top_repos(counts: HashMap<String, u64>, limit: usize) -> Vec<RepoCount> {
     let mut repos: Vec<RepoCount> = counts
         .into_iter()
@@ -1201,8 +1170,141 @@ pub fn top_repos(counts: HashMap<String, u64>, limit: usize) -> Vec<RepoCount> {
 }
 
 #[cfg(test)]
+pub(crate) async fn mock_client(app: axum::Router) -> Client {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    Client::new("test-token", 4).unwrap().with_base_url(&base)
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use axum::Json;
+    use axum::extract::Query;
+    use axum::response::IntoResponse;
+    use axum::routing::get;
+
+    fn repo_json(name: &str) -> serde_json::Value {
+        json!({ "name": name, "owner": { "login": "octocat" } })
+    }
+
+    #[tokio::test]
+    async fn get_all_follows_next_links() {
+        let app = axum::Router::new().route(
+            "/users/octocat/repos",
+            get(|Query(q): Query<HashMap<String, String>>| async move {
+                if q.get("page").map(String::as_str) == Some("2") {
+                    Json(json!([repo_json("b")])).into_response()
+                } else {
+                    (
+                        [("link", r#"<http://x/?page=2>; rel="next""#)],
+                        Json(json!([repo_json("a")])),
+                    )
+                        .into_response()
+                }
+            }),
+        );
+        let client = mock_client(app).await;
+        let repos = client.repositories("octocat", false).await.unwrap();
+        let names: Vec<_> = repos.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, ["a", "b"]);
+    }
+
+    #[tokio::test]
+    async fn counts_commits_from_last_page_link() {
+        let app = axum::Router::new()
+            .route(
+                "/repos/octocat/busy/commits",
+                get(|| async {
+                    (
+                        [("link", r#"<http://x/?per_page=1&page=42>; rel="last""#)],
+                        Json(json!([{}])),
+                    )
+                }),
+            )
+            .route(
+                "/repos/octocat/empty/commits",
+                get(|| async {
+                    (
+                        StatusCode::CONFLICT,
+                        Json(json!({ "message": "Git Repository is empty." })),
+                    )
+                }),
+            );
+        let client = mock_client(app).await;
+        let count = |repo: &'static str| client.count_repo_commits("octocat", "octocat", repo);
+        assert_eq!(count("busy").await.unwrap(), 42);
+        assert_eq!(count("empty").await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn many_prs_are_counted_without_listing_merged_ones() {
+        let pr = |state: &str, merged: Option<&str>| {
+            json!({
+                "repository_url": "https://api.github.com/repos/o/r",
+                "state": state,
+                "created_at": "2026-01-01T00:00:00Z",
+                "pull_request": { "merged_at": merged },
+            })
+        };
+        let all = json!({
+            "total_count": 1500,
+            "items": [
+                pr("open", None),
+                pr("closed", Some("2026-01-01T02:00:00Z")),
+                pr("closed", None),
+            ],
+        });
+        let open = json!({ "total_count": 1, "items": [pr("open", None)] });
+        let merged = json!({ "total_count": 900, "items": [] });
+        let app = axum::Router::new().route(
+            "/search/issues",
+            get(move |Query(q): Query<HashMap<String, String>>| async move {
+                match q["q"].as_str() {
+                    "author:octocat is:pr" => Json(all),
+                    "author:octocat is:pr is:open" => Json(open),
+                    "author:octocat is:pr is:merged" => Json(merged),
+                    other => panic!("unexpected search {other}"),
+                }
+            }),
+        );
+
+        let client = mock_client(app).await;
+        let (stats, warnings) = client.pull_requests("octocat").await.unwrap();
+        assert_eq!(
+            (stats.total, stats.open, stats.merged, stats.closed),
+            (1500, 1, 900, 599)
+        );
+        assert_eq!(stats.avg_merge_time, TimeDelta::hours(2));
+        assert_eq!(stats.open_prs.len(), 1);
+        assert_eq!(stats.top_repos[0].repo_name, "o/r");
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+    }
+
+    #[tokio::test]
+    async fn missing_user_is_reported_by_name() {
+        let client = mock_client(axum::Router::new()).await;
+        let err = client.user("ghost").await.unwrap_err();
+        assert_eq!(err.to_string(), "user 'ghost' not found");
+    }
+
+    #[tokio::test]
+    async fn graphql_errors_with_data_become_warnings() {
+        let app = axum::Router::new().route(
+            "/graphql",
+            axum::routing::post(|| async {
+                Json(json!({ "data": { "n": 1 }, "errors": [{ "message": "partial" }] }))
+            }),
+        );
+        let client = mock_client(app).await;
+        let (data, errors) = client
+            .graphql::<serde_json::Value>("{ n }", json!({}))
+            .await
+            .unwrap();
+        assert_eq!(data.unwrap()["n"], 1);
+        assert_eq!(errors, ["partial"]);
+    }
 
     #[test]
     fn parses_link_header() {

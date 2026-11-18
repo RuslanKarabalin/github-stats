@@ -1,7 +1,6 @@
 BINARY_NAME=github-stats
 BUILD_DIR=./target/release
 CARGO=cargo
-# GitHub username to analyze; empty means the token's own account.
 GH_USER ?=
 USER_FLAG=$(if $(GH_USER),--user $(GH_USER))
 

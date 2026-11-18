@@ -1,5 +1,3 @@
-//! Serves the statistics as a single HTML page on localhost.
-
 mod charts;
 
 use std::future::Future;
@@ -9,8 +7,10 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use axum::Router;
 use axum::body::Bytes;
-use axum::http::StatusCode;
-use axum::response::Html;
+use axum::extract::Request;
+use axum::http::{StatusCode, header};
+use axum::middleware::{self, Next};
+use axum::response::{Html, IntoResponse, Response};
 use axum::routing::any;
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeDelta};
 use minijinja::value::Serde;
@@ -35,7 +35,6 @@ pub struct Server {
 }
 
 impl Server {
-    /// Renders the page and binds the listening socket.
     pub async fn new(stats: &UserStats, host: &str, port: u16) -> Result<Self> {
         let page = render(stats, Local::now())?;
 
@@ -56,14 +55,15 @@ impl Server {
         format!("http://{}", self.addr)
     }
 
-    /// Serves requests until `shutdown` completes, then gives open
-    /// connections a few seconds to finish.
     pub async fn run(self, shutdown: impl Future<Output = ()>) -> Result<()> {
         let page = self.page;
+        let addr = self.addr;
         let app = Router::new()
-            // Bytes clones share the rendered page instead of copying it.
             .route("/", any(move || async move { Html(page) }))
-            .fallback(|| async { (StatusCode::NOT_FOUND, "404 page not found\n") });
+            .fallback(|| async { (StatusCode::NOT_FOUND, "404 page not found\n") })
+            .layer(middleware::from_fn(move |req: Request, next: Next| {
+                check_host(addr, req, next)
+            }));
 
         let (stop_tx, stop_rx) = oneshot::channel::<()>();
         let serve = axum::serve(self.listener, app)
@@ -86,6 +86,34 @@ impl Server {
     }
 }
 
+async fn check_host(addr: SocketAddr, req: Request, next: Next) -> Response {
+    let host = req
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok());
+    if host.is_some_and(|host| is_local_host(host, addr)) {
+        next.run(req).await
+    } else {
+        (StatusCode::FORBIDDEN, "403 unexpected Host header\n").into_response()
+    }
+}
+
+fn is_local_host(host: &str, addr: SocketAddr) -> bool {
+    let host = host.trim().to_ascii_lowercase();
+    let (name, port) = match host.rsplit_once(':') {
+        Some((name, port)) if !host.ends_with(']') => match port.parse::<u16>() {
+            Ok(port) => (name, port),
+            Err(_) => return false,
+        },
+        _ => (host.as_str(), 80),
+    };
+    let bound = match addr {
+        SocketAddr::V4(a) => a.ip().to_string(),
+        SocketAddr::V6(a) => format!("[{}]", a.ip()),
+    };
+    port == addr.port() && (matches!(name, "localhost" | "127.0.0.1" | "[::1]") || name == bound)
+}
+
 #[derive(Serialize)]
 struct PageContext {
     username: String,
@@ -102,6 +130,7 @@ struct PageContext {
     followers: String,
     following: String,
     public_repos: String,
+    total_repos: String,
     public_gists: String,
     total_stars: String,
     total_forks: String,
@@ -148,7 +177,6 @@ struct ChartFlags {
     repos: bool,
 }
 
-/// One part of a part-to-whole bar.
 #[derive(Debug, Serialize)]
 struct Segment {
     name: String,
@@ -231,6 +259,7 @@ fn render(stats: &UserStats, now: DateTime<Local>) -> Result<String> {
         followers: format::count(stats.followers),
         following: format::count(stats.following),
         public_repos: format::count(stats.public_repos),
+        total_repos: format::count(stats.total_repos),
         public_gists: format::count(stats.public_gists),
         total_stars: format::count(stats.total_stars),
         total_forks: format::count(stats.total_forks),
@@ -415,8 +444,6 @@ fn human_date(date: Option<NaiveDate>) -> String {
     }
 }
 
-/// Keeps only links with a safe scheme (or no scheme at all), so a profile
-/// URL such as `javascript:...` cannot run code when clicked.
 fn safe_url(url: &str) -> String {
     let scheme_end = url.find([':', '/', '?', '#']);
     match scheme_end {
@@ -432,9 +459,6 @@ fn safe_url(url: &str) -> String {
     }
 }
 
-/// Turns a user-entered website into a link. GitHub keeps the text as typed,
-/// so `example.com` gets an `https://` prefix instead of becoming a link
-/// relative to this page.
 fn external_url(url: &str) -> String {
     let url = url.trim();
     if url.is_empty() {
@@ -453,8 +477,6 @@ fn external_url(url: &str) -> String {
     }
 }
 
-/// Serializes `value` as JSON that is safe to embed inside a `<script>`
-/// element: characters that could close the element are escaped.
 fn script_safe_json(value: &impl Serialize) -> Result<String> {
     let json = serde_json::to_string(value).context("failed to encode chart data")?;
     let mut out = String::with_capacity(json.len());
@@ -524,6 +546,14 @@ mod tests {
         let missing = reqwest::get(format!("{url}/nope")).await.unwrap();
         assert_eq!(missing.status(), reqwest::StatusCode::NOT_FOUND);
 
+        let rebound = reqwest::Client::new()
+            .get(&url)
+            .header("host", "evil.example")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(rebound.status(), reqwest::StatusCode::FORBIDDEN);
+
         stop_tx.send(()).unwrap();
         handle.await.unwrap().unwrap();
     }
@@ -547,6 +577,31 @@ mod tests {
         let html = render(&sample_stats(), Local::now()).unwrap();
         assert!(!html.contains("<script>alert(1)</script>"));
         assert!(!html.contains(r#"href="javascript:"#));
+    }
+
+    #[test]
+    fn local_hosts_only() {
+        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        for ok in [
+            "127.0.0.1:8080",
+            "localhost:8080",
+            "LOCALHOST:8080",
+            "[::1]:8080",
+        ] {
+            assert!(is_local_host(ok, addr), "{ok}");
+        }
+        for bad in [
+            "evil.example:8080",
+            "127.0.0.1:9090",
+            "localhost",
+            "127.0.0.1:x",
+            "[::1]",
+            "",
+        ] {
+            assert!(!is_local_host(bad, addr), "{bad}");
+        }
+        let port80: SocketAddr = "127.0.0.1:80".parse().unwrap();
+        assert!(is_local_host("localhost", port80));
     }
 
     #[test]
@@ -582,8 +637,10 @@ mod tests {
             ..UserStats::default()
         };
         let html = render(&stats, Local::now()).unwrap();
-        // HTML escaping writes "/" as an entity, which browsers decode.
-        assert!(html.contains(r#"href="https:&#x2f;&#x2f;example.com""#), "{html}");
+        assert!(
+            html.contains(r#"href="https:&#x2f;&#x2f;example.com""#),
+            "{html}"
+        );
     }
 
     #[test]

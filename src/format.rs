@@ -1,8 +1,5 @@
-//! Human-readable formatting shared by the terminal and web output.
-
 use chrono::TimeDelta;
 
-/// Formats a byte count with binary units, e.g. `1.5 KB`.
 pub fn bytes(n: u64) -> String {
     const UNIT: u64 = 1024;
     if n < UNIT {
@@ -19,7 +16,6 @@ pub fn bytes(n: u64) -> String {
     format!("{:.1} {prefix}B", n as f64 / div as f64)
 }
 
-/// Formats an hour of the day on a 12-hour clock, e.g. `3:00 PM`.
 pub fn hour(h: u32) -> String {
     match h {
         0 => "12:00 AM".to_string(),
@@ -29,8 +25,6 @@ pub fn hour(h: u32) -> String {
     }
 }
 
-/// Formats a count with a unit that takes a plain `s` in the plural,
-/// e.g. `1 day` or `3 days`.
 pub fn units(n: i64, unit: &str) -> String {
     if n == 1 {
         format!("1 {unit}")
@@ -39,8 +33,6 @@ pub fn units(n: i64, unit: &str) -> String {
     }
 }
 
-/// Formats a duration as days, or hours or minutes when shorter than a day.
-/// `short` writes minutes as `min`.
 pub fn duration(d: TimeDelta, short: bool) -> String {
     match d.num_days() {
         0 if d.num_hours() == 0 && short => format!("{} min", d.num_minutes()),
@@ -50,7 +42,6 @@ pub fn duration(d: TimeDelta, short: bool) -> String {
     }
 }
 
-/// Formats an integer with thousands separators, e.g. `12,345`.
 pub fn count(n: impl Into<i128>) -> String {
     let n: i128 = n.into();
     let digits = n.unsigned_abs().to_string();
@@ -67,7 +58,6 @@ pub fn count(n: impl Into<i128>) -> String {
     out
 }
 
-/// Shortens a string to `max` characters, ending with `...` when cut.
 pub fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_string();

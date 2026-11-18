@@ -7,11 +7,11 @@ pub enum Format {
     Json,
 }
 
-/// A CLI tool to display GitHub profile statistics.
 #[derive(Debug, Parser)]
 #[command(
     name = "github-stats",
     version,
+    about = "A CLI tool to display GitHub profile statistics",
     after_help = "\
 Examples:
   github-stats --user octocat
@@ -26,46 +26,60 @@ Authentication:
   Create a token at: https://github.com/settings/tokens"
 )]
 pub struct Config {
-    /// GitHub Personal Access Token (overrides GITHUB_TOKEN; prefer the variable)
-    #[arg(long, default_value = "", hide_default_value = true)]
+    #[arg(
+        long,
+        default_value = "",
+        hide_default_value = true,
+        help = "GitHub Personal Access Token (overrides GITHUB_TOKEN; prefer the variable)"
+    )]
     pub token: String,
 
-    /// GitHub username to analyze (defaults to authenticated user)
-    #[arg(long = "user")]
+    #[arg(
+        long = "user",
+        help = "GitHub username to analyze (defaults to authenticated user)"
+    )]
     pub username: Option<String>,
 
-    /// Scan the commit history of every repository to find the most active
-    /// hour (slow). Without it, recent push events are used
-    #[arg(long = "full")]
+    #[arg(
+        long = "full",
+        help = "Scan the commit history of every repository to find the most active hour (slow). Without it, recent push events are used"
+    )]
     pub full_scan: bool,
 
-    /// Include your private repositories (only when analyzing the
-    /// authenticated user)
-    #[arg(long = "private")]
+    #[arg(
+        long = "private",
+        help = "Include your private repositories (only when analyzing the authenticated user)"
+    )]
     pub include_private: bool,
 
-    /// Output format
-    #[arg(long, value_enum, default_value_t = Format::Table)]
+    #[arg(long, value_enum, default_value_t = Format::Table, help = "Output format")]
     pub format: Format,
 
-    /// Maximum concurrent API requests (1-50)
-    #[arg(long = "workers", default_value_t = 10)]
+    #[arg(
+        long = "workers",
+        default_value_t = 10,
+        help = "Maximum concurrent API requests (1-50)"
+    )]
     pub max_workers: usize,
 
-    /// Serve the statistics as a page on localhost instead of printing them (ignores --format)
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Serve the statistics as a page on localhost instead of printing them (ignores --format)"
+    )]
     pub web: bool,
 
-    /// Port to listen on with --web (0 picks a free port)
-    #[arg(long, default_value_t = 8080)]
+    #[arg(
+        long,
+        default_value_t = 8080,
+        help = "Port to listen on with --web (0 picks a free port)"
+    )]
     pub port: u16,
 }
 
 impl Config {
     pub fn load() -> Result<Self> {
         let cfg = Self::parse();
-        // Variables already set in the environment win over the .env file.
-        match dotenvy::dotenv() {
+        match dotenvy::from_path(".env") {
             Ok(_) => {}
             Err(err) if err.not_found() => {}
             Err(err) => bail!("failed to read .env file: {err}"),
@@ -86,8 +100,22 @@ impl Config {
             bail!("workers must be between 1 and 50");
         }
         cfg.username = cfg.username.filter(|u| !u.is_empty());
+        if let Some(username) = &cfg.username
+            && !is_valid_username(username)
+        {
+            bail!(
+                "invalid GitHub username '{username}': use up to 39 letters, digits \
+                 or hyphens, not starting with a hyphen"
+            );
+        }
         Ok(cfg)
     }
+}
+
+pub fn is_valid_username(name: &str) -> bool {
+    (1..=39).contains(&name.len())
+        && !name.starts_with('-')
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
 #[cfg(test)]
@@ -120,6 +148,15 @@ mod tests {
     fn token_from_env() {
         assert_eq!(parse(&[], Some("env")).unwrap().token, "env");
         assert!(parse(&[], None).is_err());
+    }
+
+    #[test]
+    fn validates_username() {
+        assert!(parse(&["--user", "octo-cat42"], Some("t")).is_ok());
+        assert_eq!(parse(&["--user", ""], Some("t")).unwrap().username, None);
+        for bad in ["-octocat", "octo/cat", "octo cat", "a?b", &"a".repeat(40)] {
+            assert!(parse(&["--user", bad], Some("t")).is_err(), "{bad:?}");
+        }
     }
 
     #[test]

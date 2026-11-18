@@ -1,8 +1,3 @@
-//! Terminal output: status messages and the statistics report.
-//!
-//! Status messages go to stderr so that stdout carries only the report,
-//! which keeps `--format json` output parseable.
-
 use anyhow::Result;
 use chrono::{DateTime, Local, Utc};
 use comfy_table::{
@@ -15,7 +10,6 @@ use crate::format;
 use crate::github::{UserStats, language_stats};
 
 const WIDTH: usize = 80;
-/// Light box drawing without lines between body rows.
 const TABLE_STYLE: TableStyle = TableStyle::new()
     .top_border(LineStyle::new('┌', '─', '┬', '┐'))
     .header_lines(ContentLineStyle::new('│', '│', '│'))
@@ -136,21 +130,23 @@ fn print_tables(stats: &UserStats) {
     } else {
         "📚 REPOSITORY STATISTICS"
     });
-    println!(
-        "{}",
-        table(
-            ["Metric", "Value"],
-            [
-                ["Public Repositories".into(), stats.public_repos.to_string()],
-                ["Public Gists".into(), stats.public_gists.to_string()],
-                [
-                    "Total Stars Received".into(),
-                    format!("{} ⭐", stats.total_stars)
-                ],
-                ["Total Forks Received".into(), stats.total_forks.to_string()],
-            ],
-        )
-    );
+    let mut rows = vec![["Public Repositories".into(), stats.public_repos.to_string()]];
+    if stats.includes_private_repos {
+        rows.push([
+            "All Repositories (incl. private)".into(),
+            stats.total_repos.to_string(),
+        ]);
+    }
+    rows.extend([
+        ["Public Gists".into(), stats.public_gists.to_string()],
+        [
+            "Total Stars Received".into(),
+            format!("{} ⭐", stats.total_stars),
+        ],
+        ["Total Forks Received".into(), stats.total_forks.to_string()],
+    ]);
+    println!("{}", table(["Metric", "Value"], rows));
+    println!("  Stars and forks count original repositories, not the user's forks.");
 
     section("🔥 CONTRIBUTION STREAKS");
     let mut rows = Vec::new();

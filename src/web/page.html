@@ -309,6 +309,7 @@ svg .s4 { fill: var(--series-4); }
 }
 
 .card-head + .subtitle { margin-top: -8px; }
+.subtitle.note { margin: 12px 0 0; }
 
 .chart { width: 100%; min-height: 1px; }
 .chart svg { display: block; overflow: visible; }
@@ -582,10 +583,14 @@ footer {
       <div class="tile"><div class="label">Followers</div><div class="value">{{ followers }}</div></div>
       <div class="tile"><div class="label">Following</div><div class="value">{{ following }}</div></div>
       <div class="tile"><div class="label">Public repositories</div><div class="value">{{ public_repos }}</div></div>
+      {% if includes_private_repos %}
+      <div class="tile"><div class="label">All repositories, incl. private</div><div class="value">{{ total_repos }}</div></div>
+      {% endif %}
       <div class="tile"><div class="label">Public gists</div><div class="value">{{ public_gists }}</div></div>
       <div class="tile"><div class="label">Stars received</div><div class="value">{{ total_stars }}</div></div>
       <div class="tile"><div class="label">Forks received</div><div class="value">{{ total_forks }}</div></div>
     </div>
+    <p class="subtitle note">Stars and forks count original repositories, not the user's forks</p>
   </section>
 
   {% if contrib %}

@@ -1,6 +1,3 @@
-//! Data for the interactive charts. It is embedded in the page as JSON and
-//! drawn by charts.js.
-
 use std::collections::HashMap;
 
 use chrono::{Datelike, Months, NaiveDate, Weekday};
@@ -134,8 +131,6 @@ pub fn summarize_contributions(
     Some(summary)
 }
 
-/// Totals each month from the first active month to `today`, including
-/// months with no contributions.
 pub fn monthly_contributions(days: &[ContributionDay], today: NaiveDate) -> Vec<MonthPoint> {
     let Some(first) = days.first() else {
         return Vec::new();
@@ -165,8 +160,6 @@ pub fn monthly_contributions(days: &[ContributionDay], today: NaiveDate) -> Vec<
     points
 }
 
-/// Averages contributions per weekday over every day from the first active
-/// day to `today`, so idle days count too. Weeks start on Monday.
 pub fn weekday_contributions(days: &[ContributionDay], today: NaiveDate) -> Vec<WeekdayPoint> {
     let Some(first) = days.first() else {
         return Vec::new();
@@ -237,7 +230,6 @@ mod tests {
 
     #[test]
     fn weekday_contributions_average_over_idle_days() {
-        // 2026-01-05 is a Monday; the range covers two Mondays.
         let got = weekday_contributions(&[day("2026-01-05", 4)], date("2026-01-12"));
         assert_eq!(got.len(), 7);
         assert_eq!((got[0].name, got[0].total, got[0].average), ("Mon", 4, 2.0));

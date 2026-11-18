@@ -24,7 +24,6 @@ async fn main() -> ExitCode {
         }
     };
 
-    // Ctrl+C or SIGTERM while fetching aborts the run.
     let stats = tokio::select! {
         stats = collect_stats(&cfg) => match stats {
             Some(stats) => stats,
@@ -65,8 +64,6 @@ async fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Fetches and calculates the statistics, reporting progress and problems
-/// as it goes. Returns `None` after reporting a fatal error.
 async fn collect_stats(cfg: &Config) -> Option<UserStats> {
     let client = match Client::new(&cfg.token, cfg.max_workers) {
         Ok(client) => client,
@@ -76,8 +73,6 @@ async fn collect_stats(cfg: &Config) -> Option<UserStats> {
         }
     };
 
-    // The authenticated login is needed when no user was given, and to make
-    // sure --private is only used for the token's own account.
     let login = if cfg.username.is_none() || cfg.include_private {
         match with_spinner("Getting authenticated user...", client.authenticated_user()).await {
             Ok(login) => {
@@ -139,8 +134,6 @@ async fn collect_stats(cfg: &Config) -> Option<UserStats> {
     Some(stats)
 }
 
-/// Reports the remaining budget of each API the tool uses, warning about the
-/// ones that are nearly used up.
 async fn check_rate_limit(client: &Client) -> Result<()> {
     let limits = client.rate_limit().await?;
     let budgets = [
@@ -168,7 +161,6 @@ async fn check_rate_limit(client: &Client) -> Result<()> {
     Ok(())
 }
 
-/// Clears the spinner line even when the future it wraps is cancelled.
 struct Spinner(ProgressBar);
 
 impl Drop for Spinner {
@@ -177,7 +169,6 @@ impl Drop for Spinner {
     }
 }
 
-/// Shows a spinner with `message` while `fut` runs.
 async fn with_spinner<T>(message: &'static str, fut: impl Future<Output = T>) -> T {
     let spinner = Spinner(ProgressBar::new_spinner());
     let spinner = &spinner.0;
@@ -192,7 +183,6 @@ async fn with_spinner<T>(message: &'static str, fut: impl Future<Output = T>) ->
     fut.await
 }
 
-/// Completes on Ctrl+C or, on Unix, SIGTERM.
 async fn shutdown_signal() {
     let ctrl_c = async {
         let _ = tokio::signal::ctrl_c().await;
